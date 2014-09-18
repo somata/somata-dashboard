@@ -1,0 +1,141 @@
+*
+    margin: 0
+    padding: 0
+    box-sizing:  border-box
+
+body
+    font-size: 13px
+    font-family: "Roboto", "Helvetica", "Arial", sans-serif
+    background: #282828
+
+.container
+    padding-top: 48px
+    box-shadow: 0 1px 2px rgba(#000, 0.03)
+
+.box
+    background: #fff
+    box-shadow: 0 2px 3px rgba(#000, 0.03)
+
+#tabs
+    background: #f6f6f6
+    font-size: 12px
+    font-weight: 700
+    border-bottom: 1px solid #ddd
+    box-shadow: 0 3px 3px rgba(#000, 0.05)
+    z-index: 9000
+    position: fixed
+    top: 0
+    left: 0
+    right: 0
+    height: 48px
+
+    .logo
+        width: 24px
+        height: 24px
+        margin-top: 12px
+        margin-left: 17px
+        margin-right: 8px
+        float: left
+
+    .tab
+        display: inline-block
+        color: #aaa
+        -webkit-transition: color 0.2s
+        padding: 16px
+        &:hover
+            cursor: pointer
+        &.selected
+            color: #222
+
+.service
+    position: relative
+
+    .actions
+        position: absolute
+        right: 25px
+        padding: 1em 20px
+        opacity: 0
+        a
+            margin-left: 20px
+            color: #999
+            &:hover
+                text-decoration: underline
+                cursor: pointer
+    &:hover .actions
+        opacity: 1
+
+    .name, .dir, .command
+        display: inline-block
+        width: 25%
+        padding: 1em 20px
+    .command
+        width: 50%
+
+    .name, .dir, .command
+        font-family: Inconsolata, monospace
+    .dir
+        color: #999
+
+    .log_count
+        position: absolute
+        top: 0
+        right: 0
+        padding: 1em 20px
+        color: #ccc
+        -webkit-transition: color 0.2s
+        &.open
+            color: #222
+            font-weight: bold
+        &.fresh
+            color: #f42
+            font-weight: bold
+
+    .logs
+        pre
+            padding: 1em
+            line-height: 1.5em
+            background: #333
+            color: #fff
+        .actions
+            right: 0
+
+#docs
+    padding: 20px
+
+#shell
+    input
+        width: 100%
+        background: #202020
+        color: #eee
+        border-bottom: 1px solid #393939
+    .result
+        background: #292929
+        color: #999
+        font-family: Inconsolata, monospace
+        padding: 1em
+
+input, button
+    display: inline-block
+    width: 25%
+    padding: 10px 20px
+    font: inherit
+    border: none
+    height: 40px
+    outline: none
+    border-top: 1px solid transparent
+    border-bottom: 1px solid #d6d6d6
+    -webkit-appearance: none
+
+input
+    font-family: Inconsolata, monospace
+    background: #eee
+
+button
+    background: #e4e4e4
+    color: #333
+    -webkit-transition: background-color 0.2s
+    &:disabled
+        color: #aaa
+        background: #f3f3f3
+    font-weight: bold
+
