@@ -17,6 +17,10 @@ window.ServiceView = React.createClass
         e.stopPropagation()
         Dispatcher.restartService(@props.service)
 
+    clear: (e) ->
+        e.stopPropagation()
+        @refs.logs.clear()
+
     # Rendering
     # --------------------------------------------------------------------------
 
@@ -24,7 +28,9 @@ window.ServiceView = React.createClass
         D.div(className: 'service', onClick: @toggleLogs,
             ActionsView(actions: {
                 stop: @stop
-                restart: @restart}),
+                restart: @restart
+                clear: @clear
+            }),
             D.span(className: 'name', @props.service.name),
             D.span(className: 'dir', @props.service.dir),
             D.span(className: 'command', @props.service.command)

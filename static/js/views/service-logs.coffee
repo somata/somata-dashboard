@@ -32,8 +32,7 @@ window.ServiceLogsView = React.createClass
             open: !@state.open
             alert: false
 
-    clear: (e) ->
-        e.stopPropagation()
+    clear: ->
         @setState data: ''
 
     # Rendering
@@ -51,7 +50,6 @@ window.ServiceLogsView = React.createClass
 
         D.div(className: 'logs',
             D.div(className: log_count_class, count),
-            ActionsView(actions: clear: @clear) if showing,
             D.pre(dangerouslySetInnerHTML: __html: @renderLogs()) if showing
         )
 
