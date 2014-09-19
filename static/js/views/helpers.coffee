@@ -2,9 +2,6 @@ window.D = React.DOM
 
 window.ActionsView = React.createClass
 
-    doAction: ->
-        alert('action')
-
     render: ->
         D.div(className: 'actions',
             _.map(@props.actions, @renderAction)

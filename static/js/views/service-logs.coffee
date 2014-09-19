@@ -20,11 +20,9 @@ window.ServiceLogsView = React.createClass
     # --------------------------------------------------------------------------
 
     addData: (d) ->
-        console.log "Trying to add data: " + d
-        console.log @state
         @setState
             data: @state.data + d
-            fresh: !@state.open
+            alert: @state.alert || (d.match('ERROR') && !@state.open)
 
     # Actions
     # --------------------------------------------------------------------------
@@ -32,9 +30,10 @@ window.ServiceLogsView = React.createClass
     toggleOpen: ->
         @setState
             open: !@state.open
-            fresh: false
+            alert: false
 
-    clear: ->
+    clear: (e) ->
+        e.stopPropagation()
         @setState data: ''
 
     # Rendering
@@ -43,7 +42,7 @@ window.ServiceLogsView = React.createClass
     render: ->
         log_count_class = _.compact([
             'log_count'
-            'fresh' if @state.fresh
+            'alert' if @state.alert
             'open' if @state.open
         ]).join(' ')
 
@@ -53,6 +52,14 @@ window.ServiceLogsView = React.createClass
         D.div(className: 'logs',
             D.div(className: log_count_class, count),
             ActionsView(actions: clear: @clear) if showing,
-            D.pre({}, @state.data) if showing
+            D.pre(dangerouslySetInnerHTML: __html: @renderLogs()) if showing
         )
+
+    renderLogs: ->
+        colorErrors = (line) ->
+            if line.match 'ERROR'
+                "<span class='error'>#{ line }</span>"
+            else
+                line
+        @state.data.split('\n').map(colorErrors).join('\n')
 
