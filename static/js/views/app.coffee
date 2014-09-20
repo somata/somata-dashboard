@@ -4,6 +4,12 @@ console.log "Starting app..."
 
 window.AppView = React.createClass
 
+    componentWillMount: ->
+        @props.router.on 'route', @setPage
+
+    setPage: ->
+        @setState page: @props.router.current_page
+
     render: ->
         return D.div(null) if !@state?.page
 
@@ -15,7 +21,7 @@ window.AppView = React.createClass
     renderPagesNav: ->
         selected_page_name = @state.page.page_slug
         
-        pages = @props.page_slugs.map (p) -> # Create a link for each page slug
+        pages = @props.router.page_slugs.map (p) -> # Create a link for each page slug
             selectedClass = if p == selected_page_name then 'selected' else ''
             D.a(key: p, className: selectedClass, href: '#' + p, p)
 

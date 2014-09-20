@@ -4,8 +4,8 @@ attagePageSlugs = (pages) ->
         page_view.page_slug = page_slug
 
 # Generate a function that opens a page on the app view
-pageSetter = (page_view, app_view) ->
-    -> app_view.setState page: page_view
+pageSetter = (page_view) ->
+    -> @current_page = page_view
 
 # Generate a set of routes for the router
 makeRoutes = (pages) ->
@@ -16,17 +16,19 @@ makeRoutes = (pages) ->
     ) # Returns an object of {route: page_slug, ...}
 
 # Generate a set of routing functions
-makeActions = (pages, app_view) ->
+makeActions = (pages) ->
     actions = _.object(
         _.pairs(pages).map ([page_slug, page_view]) ->
-            [page_slug, pageSetter(page_view, app_view)]
+            [page_slug, pageSetter(page_view)]
     ) # Returns an object of {page_slug: page_view, ...}
 
 # Generate a router class
-window.PageRouter = (pages, app_view) ->
+window.PageRouter = (pages) ->
     attagePageSlugs(pages)
     page_routes = makeRoutes(pages)
-    page_actions = makeActions(pages, app_view)
-    router_extension = _.extend {routes: page_routes}, page_actions
+    page_actions = makeActions(pages)
+    router_extension = _.extend page_actions,
+        routes: page_routes
+        page_slugs: _.keys pages
     Backbone.Router.extend router_extension
 
