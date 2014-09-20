@@ -38,5 +38,3 @@ window.ShellView = React.createClass
     renderResult: (result) ->
         ResultView(key: result.id, data: result.data)
 
-ShellView.tabName = 'Shell'
-

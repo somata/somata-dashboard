@@ -16,7 +16,7 @@ body
     background: #fff
     box-shadow: 0 2px 3px rgba(#000, 0.03)
 
-#tabs
+#nav
     background: #f6f6f6
     font-size: 12px
     font-weight: 700
@@ -37,11 +37,13 @@ body
         margin-right: 8px
         float: left
 
-    .tab
+    a
         display: inline-block
         color: #aaa
         -webkit-transition: color 0.2s
         padding: 16px
+        text-transform: capitalize
+        text-decoration: none
         &:hover
             cursor: pointer
         &.selected

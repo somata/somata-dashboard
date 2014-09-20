@@ -4,32 +4,27 @@ console.log "Starting app..."
 
 window.AppView = React.createClass
 
-    getInitialState: ->
-        tab: @props.tabs[0]
-
     render: ->
-        D.div(null,
-            D.div(id: 'tabs', @renderTabs())
-            D.div(className: 'box', @renderTabContent())
+        return D.div(null) if !@state?.page
+
+        return D.div(null,
+            D.div(id: 'nav', @renderPagesNav())
+            D.div(className: 'box', @renderPageContent())
         )
 
-    renderTabs: ->
-        # TODO: Clean this up
-        tab_names = _.pluck @props.tabs, 'tabName'
-        selected_tab_name = @state.tab.tabName
-        selectTab = (t) =>
-            @setState tab: _.findWhere @props.tabs, tabName: t
+    renderPagesNav: ->
+        selected_page_name = @state.page.page_slug
         
-        tabs = [LogoView(key: 'logo')].concat tab_names.map (t) ->
-            tabClass = 'tab'
-            tabClass += ' selected' if t == selected_tab_name
-            _selectTab = -> selectTab t
-            D.span(key: t, className: tabClass, onClick: _selectTab, t)
+        pages = @props.page_slugs.map (p) -> # Create a link for each page slug
+            selectedClass = if p == selected_page_name then 'selected' else ''
+            D.a(key: p, className: selectedClass, href: '#' + p, p)
 
-    renderTabContent: ->
-        @state.tab()
+        return [LogoView(key: 'logo')].concat pages # Prepend the logo
+
+    renderPageContent: ->
+        return @state.page()
 
 LogoView = React.createClass
     render: ->
-        D.img(className: 'logo', src: "/images/somata-logo.svg")
+        return D.img(className: 'logo', src: "/images/somata-logo.svg")
 

@@ -53,5 +53,3 @@ window.ServicesView = React.createClass
             key: service.name
             service: service
 
-ServicesView.tabName = 'Services'
-

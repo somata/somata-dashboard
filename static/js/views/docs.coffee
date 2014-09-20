@@ -8,5 +8,3 @@ window.DocsView = React.createClass
             D.p(null, "Some docs could be nice.")
         )
 
-DocsView.tabName = "Docs"
-
