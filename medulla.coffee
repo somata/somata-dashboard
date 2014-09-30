@@ -4,12 +4,15 @@ forever = require 'forever-monitor'
 _ = require 'underscore'
 util = require 'util'
 
+medulla_id = _.compact([process.env.MEDULLA_PREFIX, 'medulla']).join(':')
+
 class ServiceProcess
     constructor: ({@name, @dir, @command}) ->
         if !@dir
-            @dir = '~/Projects/maia'
+            @dir = process.env.MEDULLA_ROOT || '~/Projects/gofish'
         if !@command
-            @command = "coffee services/#{ @name }.coffee"
+            ext = process.env.MEDULLA_EXT || ''
+            @command = "coffee services/#{ @name }#{ ext }"
         @dir = @dir.replace('~', process.env.HOME)
 
     runForever: ->
@@ -48,7 +51,7 @@ stopService = (service, cb) ->
 listServices = (cb) ->
     cb null, _.values(running_services).map((s) -> s.toJson())
 
-medulla = new somata.Service 'medulla', {
+medulla = new somata.Service medulla_id, {
     listServices
     startService
     restartService
