@@ -7,30 +7,30 @@ ServicesDispatcher =
     # Commands
 
     getServices: (cb) ->
-        remote 'medulla', 'listServices', cb
+        remote medulla_id, 'listServices', cb
 
     startService: (service) ->
-        remote 'medulla', 'startService', service, ->
+        remote medulla_id, 'startService', service, ->
             console.log "Started #{ service.name }."
 
     stopService: (service) ->
-        remote 'medulla', 'stopService', service, ->
+        remote medulla_id, 'stopService', service, ->
             console.log "Stopped #{ service.name }."
 
     restartService: (service) ->
-        remote 'medulla', 'restartService', service, ->
+        remote medulla_id, 'restartService', service, ->
             console.log "Restarted #{ service.name }."
 
     # Subscriptions
 
     onStartService: (cb) ->
-        subscribe 'medulla', 'startService', cb
+        subscribe medulla_id, 'startService', cb
 
     onStopService: (cb) ->
-        subscribe 'medulla', 'stopService', cb
+        subscribe medulla_id, 'stopService', cb
 
     onServiceLogs: (service, cb) ->
-        subscribe 'medulla', "service:#{ service.name }:stdout", cb
+        subscribe medulla_id, "service:#{ service.name }:stdout", cb
 
 ShellDispatcher =
 

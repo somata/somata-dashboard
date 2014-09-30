@@ -33,5 +33,9 @@ html
     script(src='/js/views/shell.js')
 
     script(src='/js/views/app.js')
+
+    script.
+        medulla_prefix = !{ JSON.stringify(config.medulla_prefix) }
+        window.medulla_id = _.compact([medulla_prefix, 'medulla']).join(':')
     script(src='/js/base.js')
 
