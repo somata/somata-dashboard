@@ -20,6 +20,8 @@ class ServiceProcess
         stdout_event = "service:#{ @name }:stdout"
         @_forever.on 'stdout', (stdout) ->
             medulla.publish stdout_event, stdout.toString()
+        @_forever.on 'stderr', (stdout) ->
+            medulla.publish stdout_event, stdout.toString()
 
     toJson: ->
         {@name, @dir, @command}
