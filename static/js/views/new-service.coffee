@@ -3,7 +3,7 @@ window.NewServiceView = React.createClass
 
     getInitialState: ->
         name: ''
-        dir: ''
+        cwd: ''
         command: ''
         valid: false
 
@@ -19,7 +19,7 @@ window.NewServiceView = React.createClass
     render: ->
         D.form(onSubmit: @props.onSubmit,
             @renderField('name'),
-            @renderField('dir'),
+            @renderField('cwd'),
             @renderField('command'),
             D.button(disabled: !@state.valid, "Start")
         )

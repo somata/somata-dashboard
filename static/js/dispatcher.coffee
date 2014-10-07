@@ -30,7 +30,7 @@ ServicesDispatcher =
         subscribe medulla_id, 'stopService', cb
 
     onServiceLogs: (service, cb) ->
-        subscribe medulla_id, "service:#{ service.name }:stdout", cb
+        subscribe medulla_id, "service:#{ service.id }:stdout", cb
 
 ShellDispatcher =
 
