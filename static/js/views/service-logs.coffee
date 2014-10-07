@@ -50,7 +50,7 @@ window.ServiceLogsView = React.createClass
 
         D.div(className: 'logs',
             D.div(className: log_count_class, count),
-            D.pre(dangerouslySetInnerHTML: __html: @renderLogs()) if showing
+            D.pre(null, @renderLogs()) if showing
         )
 
     renderLogs: ->
