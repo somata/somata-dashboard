@@ -1,0 +1,63 @@
+
+
+
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font: 14px/1.3em Helvetica, sans-serif;
+  padding: 20px;
+}
+
+h1 {
+  margin-bottom: 20px;
+}
+
+.instances {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -10px;
+}
+
+.instance {
+  border: 1px solid #eee;
+  width: 50%;
+  padding: 15px;
+  margin-top: 10px;
+}
+
+.instance .id {
+  word-break: break-word;
+}
+
+.instance .id + .detail {
+  margin-top: 10px;
+}
+
+.detail strong {
+  color: #ccc;
+}
+
+.empty,
+.loading {
+  font-style: italic;
+  color: #ccc;
+}
+
+.graph {
+  margin-top: 15px;
+}
+
+svg {
+  overflow: visible;
+}
+
+svg path {
+  fill: none;
+  stroke: #36c;
+  stroke-width: 2px;
+}
