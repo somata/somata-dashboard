@@ -9,25 +9,54 @@
 }
 
 body {
-  font: 14px/1.3em Helvetica, sans-serif;
+  font: 14px/1.3em Roboto, Helvetica, sans-serif;
   padding: 20px;
 }
 
-h1 {
-  margin-bottom: 20px;
+.header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
 }
 
-.instances {
-  display: flex;
-  flex-wrap: wrap;
-  margin: 0 -10px;
+.header .logo .main {
+  fill: #ccc;
+  -webkit-transition: fill 0.1s;
+}
+
+.header .logo:hover .main {
+  fill: #36c;
+}
+
+.header .logo {
+  width: 40px;
+  flex-grow: 0;
+}
+
+.keys {
+  flex-grow: 1;
+  text-align: right;
+}
+
+.keys a.active {
+  background: #36c;
+  color: #fff;
+}
+
+.keys a {
+  display: inline-block;
+  font-weight: bold;
+  padding: 10px 20px;
+  border: 1px solid #ccc;
+}
+
+.keys a + a {
+  border-left: none;
 }
 
 .instance {
-  border: 1px solid #eee;
-  width: 50%;
+  border: 1px solid #ccc;
   padding: 15px;
-  margin-top: 10px;
 }
 
 .instance .id {
@@ -52,12 +81,35 @@ h1 {
   margin-top: 15px;
 }
 
-svg {
+.graph svg {
   overflow: visible;
 }
 
-svg path {
+.graph path {
   fill: none;
   stroke: #36c;
   stroke-width: 2px;
+}
+
+.boxes {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 -10px;
+}
+
+.box {
+  padding: 10px;
+  width: 50%;
+}
+
+@media (max-width: 400px) {
+  .box {
+    width: 100%;
+  }
+}
+
+@media (min-width: 1200px) {
+  .box {
+    width: 33.33%;
+  }
 }

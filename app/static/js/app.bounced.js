@@ -1,5 +1,5 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var App, Keys, NewInstance, React, ReactDOM, RegisteredServices, Service, ServiceInstance, Store, bus, d3, get_keys, key$, service_keys, somata, _;
+var App, Keys, Logo, NewInstance, React, ReactDOM, RegisteredServices, Service, ServiceInstance, Store, bus, d3, expandStatusExtents, get_keys, key$, service_keys, somata, status_extents, _;
 
 _ = require('underscore');
 
@@ -28,6 +28,17 @@ get_keys = {
   }
 };
 
+status_extents = [-1, 0];
+
+expandStatusExtents = function(status) {
+  if (status.time < status_extents[0] || status_extents[0] === -1) {
+    status_extents[0] = status.time;
+  }
+  if (status.time > status_extents[1]) {
+    return status_extents[1] = status.time;
+  }
+};
+
 ServiceInstance = React.createClass({
   getInitialState: function() {
     return {
@@ -48,6 +59,7 @@ ServiceInstance = React.createClass({
   },
   foundStatuses: function(statuses) {
     console.log(statuses[0]);
+    statuses.map(expandStatusExtents);
     this.setState({
       statuses: statuses
     });
@@ -61,15 +73,14 @@ ServiceInstance = React.createClass({
     svg = d3.select(this.refs.graph).append('svg');
     svg.attr('width', this.w).attr('height', this.h);
     this.graph = svg.append('g');
-    this.x = d3.time.scale().range([0, this.w]).domain(d3.extent(this.state.statuses, function(d) {
-      return d.time;
-    }));
+    this.x = d3.time.scale().range([0, this.w]);
     return this.y = d3.scale.linear().range([this.h, 0]);
   },
   renderGraph: function() {
     var getKey, line, path;
     console.log('key is', this.state.key);
     getKey = get_keys[this.state.key];
+    this.x.domain(status_extents);
     this.y.domain(d3.extent(this.state.statuses, getKey));
     line = d3.svg.line().x((function(_this) {
       return function(d) {
@@ -126,10 +137,13 @@ Keys = React.createClass({
     })(this);
   },
   render: function() {
-    return React.createElement("div", null, Object.keys(get_keys).map((function(_this) {
+    return React.createElement("div", {
+      "className": 'keys'
+    }, Object.keys(get_keys).map((function(_this) {
       return function(key) {
         return React.createElement("a", {
-          "onClick": _this.didChoose(key)
+          "onClick": _this.didChoose(key),
+          "className": (key === _this.state.key ? 'active' : void 0)
         }, key);
       };
     })(this)));
@@ -198,21 +212,23 @@ RegisteredServices = React.createClass({
     }, React.createElement(NewInstance, null)) : void 0), (this.state.loading ? React.createElement("p", {
       "className": 'loading'
     }, "Loading...") : this.state.flattened ? React.createElement("div", {
-      "className": 'instances'
+      "className": 'boxes'
     }, this.state.all_instances.map(function(instance) {
-      return React.createElement(ServiceInstance, {
+      return React.createElement("div", {
+        "className": 'box'
+      }, React.createElement(ServiceInstance, {
         "id": instance.id,
         "instance": instance
-      });
+      }));
     })) : React.createElement("div", null, React.createElement("div", {
-      "className": 'services'
+      "className": 'boxes'
     }, this.state.healthy_services.map(function(service) {
       return React.createElement(Service, {
         "name": service.name,
         "instances": service.instances
       });
     })), React.createElement("div", {
-      "className": 'services'
+      "className": 'boxes'
     }, this.state.unhealthy_services.map(function(service) {
       return React.createElement(Service, {
         "name": service.name,
@@ -258,6 +274,32 @@ NewInstance = React.createClass({
   }
 });
 
+Logo = React.createClass({
+  render: function() {
+    return React.createElement("div", {
+      "className": 'logo'
+    }, React.createElement("svg", {
+      "version": "1.1",
+      "viewBox": "0 0 800 800"
+    }, React.createElement("g", {
+      "style": {
+        'fill-rule': 'evenodd',
+        fill: 'none'
+      }
+    }, React.createElement("g", {
+      "className": 'main'
+    }, React.createElement("path", {
+      "d": "M400 800C621 800 800 621 800 400 800 179 621 0 400 0 179 0 0 179 0 400 0 621 179 800 400 800ZM400 722C578 722 722 578 722 400 722 222 578 78 400 78 222 78 78 222 78 400 78 578 222 722 400 722Z"
+    }), React.createElement("circle", {
+      "cx": "262",
+      "cy": "481",
+      "r": "83"
+    }), React.createElement("path", {
+      "d": "M386 406C385 404 385 403 385 401L385 322C346 315 317 281 317 241 317 195 354 158 400 158 445 158 482 195 482 241 482 279 456 311 421 320L421 387 481 422C496 407 516 398 539 398 584 398 621 435 621 481 621 526 584 563 539 563 493 563 456 526 456 481 456 470 458 461 461 452L391 411C388 410 387 408 386 406Z"
+    })))));
+  }
+});
+
 App = React.createClass({
   getInitialState: function() {
     return {};
@@ -265,7 +307,9 @@ App = React.createClass({
   render: function() {
     return React.createElement("div", {
       "id": "main"
-    }, React.createElement("h1", null, "Services"), React.createElement(Keys, null), React.createElement(RegisteredServices, null));
+    }, React.createElement("div", {
+      "className": "header"
+    }, React.createElement(Logo, null), React.createElement(Keys, null)), React.createElement(RegisteredServices, null));
   }
 });
 
