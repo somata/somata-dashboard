@@ -20,6 +20,13 @@ get_keys =
     cpu: (d) ->
         d.cpu
 
+status_extents = [-1, 0]
+expandStatusExtents = (status) ->
+    if status.time < status_extents[0] or status_extents[0] == -1
+        status_extents[0] = status.time
+    if status.time > status_extents[1]
+        status_extents[1] = status.time
+
 ServiceInstance = React.createClass
     getInitialState: ->
         show_details: false
@@ -34,6 +41,7 @@ ServiceInstance = React.createClass
 
     foundStatuses: (statuses) ->
         console.log statuses[0]
+        statuses.map expandStatusExtents
         @setState {statuses}
         @setupGraph()
         @renderGraph()
@@ -51,13 +59,13 @@ ServiceInstance = React.createClass
 
         @x = d3.time.scale()
             .range([0, @w])
-            .domain(d3.extent @state.statuses, (d) -> d.time)
         @y = d3.scale.linear()
             .range([@h, 0])
 
     renderGraph: ->
         console.log 'key is', @state.key
         getKey = get_keys[@state.key]
+        @x.domain(status_extents)
         @y.domain(d3.extent @state.statuses, getKey)
 
         line = d3.svg.line()
@@ -80,7 +88,7 @@ ServiceInstance = React.createClass
                 {if @state.show_details then service_keys.map (key) =>
                     <p className='detail'><strong>{key}</strong> {@props.instance[key]}</p>}
             </div>
-            <div ref='graph' className='graph' />
+            <div ref='graph' className='graph'></div>
         </div>
 
 Keys = React.createClass
@@ -92,9 +100,9 @@ Keys = React.createClass
         key$.emit key
 
     render: ->
-        <div>
+        <div className='keys'>
             {Object.keys(get_keys).map (key) =>
-                <a onClick=@didChoose(key)>{key}</a>}
+                <a onClick=@didChoose(key) className={if key==@state.key then 'active'}>{key}</a>}
         </div>
 
 Service = React.createClass
@@ -138,18 +146,20 @@ RegisteredServices = React.createClass
                 <p className='loading'>Loading...</p>
 
             else if @state.flattened
-                <div className='instances'>
+                <div className='boxes'>
                     {@state.all_instances.map (instance) ->
-                        <ServiceInstance id=instance.id instance=instance />}
+                        <div className='box'>
+                            <ServiceInstance id=instance.id instance=instance />
+                        </div>}
                 </div>
 
             else
                 <div>
-                    <div className='services'>
+                    <div className='boxes'>
                         {@state.healthy_services.map (service) ->
                             <Service name=service.name instances=service.instances />}
                     </div>
-                    <div className='services'>
+                    <div className='boxes'>
                         {@state.unhealthy_services.map (service) ->
                             <Service name=service.name instances=service.instances />}
                     </div>
@@ -184,13 +194,29 @@ NewInstance = React.createClass
             <input value=@state[key] onChange=@onChange(key) placeholder=key />
         </p>
 
+Logo = React.createClass
+    render: ->
+        <div className='logo'>
+        <svg version="1.1" viewBox="0 0 800 800">
+            <g style={'fill-rule': 'evenodd', fill: 'none'}>
+                <g className='main'>
+                    <path d="M400 800C621 800 800 621 800 400 800 179 621 0 400 0 179 0 0 179 0 400 0 621 179 800 400 800ZM400 722C578 722 722 578 722 400 722 222 578 78 400 78 222 78 78 222 78 400 78 578 222 722 400 722Z"/>
+                    <circle cx="262" cy="481" r="83"/>
+                    <path d="M386 406C385 404 385 403 385 401L385 322C346 315 317 281 317 241 317 195 354 158 400 158 445 158 482 195 482 241 482 279 456 311 421 320L421 387 481 422C496 407 516 398 539 398 584 398 621 435 621 481 621 526 584 563 539 563 493 563 456 526 456 481 456 470 458 461 461 452L391 411C388 410 387 408 386 406Z"/>
+                </g>
+            </g>
+        </svg>
+        </div>
+
 App = React.createClass
     getInitialState: -> {}
 
     render: ->
         <div id="main">
-            <h1>Services</h1>
-            <Keys />
+            <div className="header">
+                <Logo />
+                <Keys />
+            </div>
             <RegisteredServices />
         </div>
 

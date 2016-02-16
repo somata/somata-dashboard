@@ -3,6 +3,7 @@ $globals
     padding_small: 15px
 
 $colors
+    blue: #36c
     med_gray: #888
     light_gray: #ccc
     lightest_gray: #f6f6f6
@@ -13,22 +14,42 @@ $colors
     box-sizing: border-box
 
 body
-    font: 14px/1.3em Helvetica, sans-serif
+    font: 14px/1.3em Roboto, Helvetica, sans-serif
     padding: $padding
 
-h1
-    margin-bottom: $padding
-
-.instances
+.header
     display: flex
-    flex-wrap: wrap
-    margin: 0 calc(-$padding/2)
+    align-items: center
+    margin-bottom: $padding_small
+
+    .logo
+        width: 40px
+        flex-grow: 0
+        .main
+            fill: $colors.light_gray
+            -webkit-transition: fill 0.1s
+        &:hover .main
+            fill: $colors.blue
+
+.keys
+    flex-grow: 1
+    text-align: right
+    
+    a
+        display: inline-block
+        font-weight: bold
+        padding: calc($padding/2) $padding
+        border: 1px solid $colors.light_gray
+        &.active
+            background: $colors.blue
+            color: #fff
+
+    a + a
+        border-left: none
 
 .instance
-    border: 1px solid #eee
-    width: 50%
+    border: 1px solid $colors.light_gray
     padding: $padding_small
-    margin-top: calc($padding/2)
 
     .id
         word-break: break-word
@@ -46,10 +67,27 @@ h1
 .graph
     margin-top: $padding_small
 
-svg
-    overflow: visible
+    svg
+        overflow: visible
 
     path
         fill: none
-        stroke: #36c
+        stroke: $colors.blue
         stroke-width: 2px
+
+.boxes
+    display: flex
+    flex-wrap: wrap
+    margin: 0 calc(-$padding/2)
+
+.box
+    padding: calc($padding/2)
+    width: 50%
+
+@media (max-width: 400px)
+    .box
+        width: 100%
+
+@media (min-width: 1200px)
+    .box
+        width: 33.33%
