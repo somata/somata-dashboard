@@ -1,0 +1,36 @@
+$globals
+    padding: 20px
+
+$colors
+    med_gray: #888
+    light_gray: #ccc
+
+*
+    margin: 0
+    padding: 0
+    box-sizing: border-box
+
+body
+    font: 14px/1.3em Helvetica, sans-serif
+    padding: $padding
+
+h1
+    margin-bottom: $padding
+
+.services
+    display: flex
+    flex-wrap: wrap
+    margin: 0 calc(-$padding/2)
+
+.service
+    padding: calc($padding/2)
+    width: 33%
+
+.instance
+    border: 1px solid #eee
+    padding: $padding
+    margin-top: calc($padding/2)
+
+.empty, .loading
+    font-style: italic
+    color: $colors.light_gray
