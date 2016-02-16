@@ -1,9 +1,11 @@
 $globals
     padding: 20px
+    padding_small: 15px
 
 $colors
     med_gray: #888
     light_gray: #ccc
+    lightest_gray: #f6f6f6
 
 *
     margin: 0
@@ -17,20 +19,37 @@ body
 h1
     margin-bottom: $padding
 
-.services
+.instances
     display: flex
     flex-wrap: wrap
     margin: 0 calc(-$padding/2)
 
-.service
-    padding: calc($padding/2)
-    width: 33%
-
 .instance
     border: 1px solid #eee
-    padding: $padding
+    width: 50%
+    padding: $padding_small
     margin-top: calc($padding/2)
+
+    .id
+        word-break: break-word
+
+    .id + .detail
+        margin-top: calc($padding/2)
+
+.detail strong
+    color: $colors.light_gray
 
 .empty, .loading
     font-style: italic
     color: $colors.light_gray
+
+.graph
+    margin-top: $padding_small
+
+svg
+    overflow: visible
+
+    path
+        fill: none
+        stroke: #36c
+        stroke-width: 2px
