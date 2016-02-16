@@ -7,7 +7,7 @@ http = require 'http'
 somata = require 'somata'
 util = require 'util'
 {log} = somata.helpers
-config = require './config'
+config = require '../config'
 redis = require('redis').createClient()
 
 client = new somata.Client
