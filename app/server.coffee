@@ -12,19 +12,20 @@ redis = require('redis').createClient()
 
 client = new somata.Client
 
-findUser = (query, cb) ->
-    redis.get 'logins:' + query.email + '::' + query.password, (err, user_id) ->
-        if user_id then getUser {id: user_id}, cb
-        else cb "No such user."
-
-getUser = (query, cb) ->
-    if user_id = query.id
-        redis.get 'users:' + user_id, (err, user_json) ->
-            cb err, JSON.parse user_json
+getUser = (user_query, cb) ->
+    console.log '[getUser]', user_query
+    if user_query.id
+        redis.get 'users:' + user_query.id, (err, user) ->
+            if user?
+                cb null, JSON.parse user
+            else
+                cb "Incorrect credentials"
     else
-        findUser query, cb
+        redis.get 'logins:' + user_query.email + '::' + user_query.password, (err, user_id) ->
+            if user_id then getUser {id: user_id}, cb
+            else cb "No such user"
 
-auth = polar_auth config.auth, {findUser, getUser, id_key: 'id'}
+auth = polar_auth config.auth, {getUser, id_key: 'id'}
 
 # Set up Polar using a base express server for Socket.IO to attach to
 
