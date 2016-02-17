@@ -126,7 +126,7 @@ a {
   width: 50%;
 }
 
-@media (max-width: 400px) {
+@media (max-width: 500px) {
   .box {
     width: 100%;
   }
@@ -135,5 +135,11 @@ a {
 @media (min-width: 1200px) {
   .box {
     width: 33.33%;
+  }
+}
+
+@media (min-width: 1500px) {
+  .box {
+    width: 25%;
   }
 }
