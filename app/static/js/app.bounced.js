@@ -1,5 +1,5 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var App, Keys, Logo, NewInstance, React, ReactDOM, RegisteredServices, Service, ServiceInstance, Store, bus, d3, expandStatusExtents, get_keys, key$, service_keys, somata, status_extents, _;
+var App, Dispatcher, Keys, Logo, NewInstance, React, ReactDOM, RegisteredServices, Service, ServiceInstance, Store, bus, d3, expandStatusExtents, get_keys, service_keys, somata, status_extents, _;
 
 _ = require('underscore');
 
@@ -13,9 +13,12 @@ d3 = require('d3');
 
 bus = require('kefir-bus');
 
-key$ = bus();
-
 Store = {};
+
+Dispatcher = {
+  key$: bus(),
+  refresh$: bus()
+};
 
 service_keys = ['host', 'port', 'client_id'];
 
@@ -47,8 +50,9 @@ ServiceInstance = React.createClass({
     };
   },
   componentDidMount: function() {
-    somata.remote('somata:dashboard:data', 'getStatuses', this.props.id).onValue(this.foundStatuses);
-    return key$.onValue((function(_this) {
+    this.setupGraph();
+    this.findStatuses();
+    Dispatcher.key$.onValue((function(_this) {
       return function(key) {
         console.log('key', key);
         return _this.setState({
@@ -56,15 +60,17 @@ ServiceInstance = React.createClass({
         }, _this.renderGraph);
       };
     })(this));
+    return Dispatcher.refresh$.onValue(this.findStatuses);
+  },
+  findStatuses: function() {
+    return somata.remote('somata:dashboard:data', 'getStatuses', this.props.id).onValue(this.foundStatuses);
   },
   foundStatuses: function(statuses) {
     console.log(statuses[0]);
     statuses.map(expandStatusExtents);
-    this.setState({
+    return this.setState({
       statuses: statuses
-    });
-    this.setupGraph();
-    return this.renderGraph();
+    }, this.renderGraph);
   },
   setupGraph: function() {
     var svg;
@@ -104,7 +110,7 @@ ServiceInstance = React.createClass({
       "className": 'instance'
     }, React.createElement("div", {
       "className": 'details'
-    }, React.createElement("h4", {
+    }, React.createElement("a", {
       "className": 'id',
       "onClick": this.toggleDetails
     }, this.props.id), (this.state.show_details ? service_keys.map((function(_this) {
@@ -132,7 +138,7 @@ Keys = React.createClass({
         _this.setState({
           key: key
         });
-        return key$.emit(key);
+        return Dispatcher.key$.emit(key);
       };
     })(this);
   },
@@ -275,9 +281,13 @@ NewInstance = React.createClass({
 });
 
 Logo = React.createClass({
+  refresh: function() {
+    return Dispatcher.refresh$.emit(true);
+  },
   render: function() {
-    return React.createElement("div", {
-      "className": 'logo'
+    return React.createElement("a", {
+      "className": 'logo',
+      "onClick": this.refresh
     }, React.createElement("svg", {
       "version": "1.1",
       "viewBox": "0 0 800 800"

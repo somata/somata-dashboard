@@ -13,6 +13,21 @@ body {
   padding: 20px;
 }
 
+a {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+@-webkit-keyframes spinIn {
+  from {
+    -webkit-transform: rotate(0deg);
+  }
+
+  to {
+    -webkit-transform: rotate(360deg);
+  }
+}
+
 .header {
   display: flex;
   align-items: center;
@@ -21,15 +36,22 @@ body {
 
 .header .logo .main {
   fill: #ccc;
-  -webkit-transition: fill 0.1s;
+  -webkit-transition: fill 0.2s;
 }
 
 .header .logo:hover .main {
   fill: #36c;
 }
 
+.header .logo:not(:active) {
+  -webkit-animation-name: spinIn;
+  -webkit-animation-duration: 0.5s;
+  -webkit-animation-delay: 0.01s;
+}
+
 .header .logo {
   width: 40px;
+  height: 40px;
   flex-grow: 0;
 }
 
@@ -40,6 +62,7 @@ body {
 
 .keys a.active {
   background: #36c;
+  border-color: #36c;
   color: #fff;
 }
 
@@ -60,6 +83,7 @@ body {
 }
 
 .instance .id {
+  font-weight: bold;
   word-break: break-word;
 }
 
