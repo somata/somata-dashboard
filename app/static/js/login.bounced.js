@@ -2115,6 +2115,10 @@ LoginPage = function(options) {
   }, React.createElement(IndexRoute, {
     "name": "login",
     "component": LoginForm
+  }), React.createElement(Route, {
+    "path": "login",
+    "name": "login",
+    "component": LoginForm
   }), (!options.hide_signup ? React.createElement(Route, {
     "path": "signup",
     "name": "signup",
