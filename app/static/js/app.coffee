@@ -5,9 +5,11 @@ somata = require './somata-stream'
 d3 = require 'd3'
 bus = require 'kefir-bus'
 
-key$ = bus()
-
 Store = {}
+
+Dispatcher =
+    key$: bus()
+    refresh$: bus()
 
 # App views
 # ------------------------------------------------------------------------------
@@ -33,18 +35,21 @@ ServiceInstance = React.createClass
         key: 'memory'
 
     componentDidMount: ->
-        somata.remote('somata:dashboard:data', 'getStatuses', @props.id).onValue @foundStatuses
-        #@foundStatuses()
-        key$.onValue (key) =>
+        @setupGraph()
+        @findStatuses()
+
+        Dispatcher.key$.onValue (key) =>
             console.log 'key', key
             @setState {key}, @renderGraph
+        Dispatcher.refresh$.onValue @findStatuses
+
+    findStatuses: ->
+        somata.remote('somata:dashboard:data', 'getStatuses', @props.id).onValue @foundStatuses
 
     foundStatuses: (statuses) ->
         console.log statuses[0]
         statuses.map expandStatusExtents
-        @setState {statuses}
-        @setupGraph()
-        @renderGraph()
+        @setState {statuses}, @renderGraph
 
     setupGraph: ->
         @w = @refs.graph.clientWidth
@@ -84,7 +89,7 @@ ServiceInstance = React.createClass
     render: ->
         <div className='instance'>
             <div className='details'>
-                <h4 className='id' onClick=@toggleDetails>{@props.id}</h4>
+                <a className='id' onClick=@toggleDetails>{@props.id}</a>
                 {if @state.show_details then service_keys.map (key) =>
                     <p className='detail'><strong>{key}</strong> {@props.instance[key]}</p>}
             </div>
@@ -97,7 +102,7 @@ Keys = React.createClass
 
     didChoose: (key) -> =>
         @setState {key}
-        key$.emit key
+        Dispatcher.key$.emit key
 
     render: ->
         <div className='keys'>
@@ -195,18 +200,21 @@ NewInstance = React.createClass
         </p>
 
 Logo = React.createClass
+    refresh: ->
+        Dispatcher.refresh$.emit true
+
     render: ->
-        <div className='logo'>
-        <svg version="1.1" viewBox="0 0 800 800">
-            <g style={'fill-rule': 'evenodd', fill: 'none'}>
-                <g className='main'>
-                    <path d="M400 800C621 800 800 621 800 400 800 179 621 0 400 0 179 0 0 179 0 400 0 621 179 800 400 800ZM400 722C578 722 722 578 722 400 722 222 578 78 400 78 222 78 78 222 78 400 78 578 222 722 400 722Z"/>
-                    <circle cx="262" cy="481" r="83"/>
-                    <path d="M386 406C385 404 385 403 385 401L385 322C346 315 317 281 317 241 317 195 354 158 400 158 445 158 482 195 482 241 482 279 456 311 421 320L421 387 481 422C496 407 516 398 539 398 584 398 621 435 621 481 621 526 584 563 539 563 493 563 456 526 456 481 456 470 458 461 461 452L391 411C388 410 387 408 386 406Z"/>
+        <a className='logo' onClick=@refresh>
+            <svg version="1.1" viewBox="0 0 800 800">
+                <g style={'fill-rule': 'evenodd', fill: 'none'}>
+                    <g className='main'>
+                        <path d="M400 800C621 800 800 621 800 400 800 179 621 0 400 0 179 0 0 179 0 400 0 621 179 800 400 800ZM400 722C578 722 722 578 722 400 722 222 578 78 400 78 222 78 78 222 78 400 78 578 222 722 400 722Z"/>
+                        <circle cx="262" cy="481" r="83"/>
+                        <path d="M386 406C385 404 385 403 385 401L385 322C346 315 317 281 317 241 317 195 354 158 400 158 445 158 482 195 482 241 482 279 456 311 421 320L421 387 481 422C496 407 516 398 539 398 584 398 621 435 621 481 621 526 584 563 539 563 493 563 456 526 456 481 456 470 458 461 461 452L391 411C388 410 387 408 386 406Z"/>
+                    </g>
                 </g>
-            </g>
-        </svg>
-        </div>
+            </svg>
+        </a>
 
 App = React.createClass
     getInitialState: -> {}

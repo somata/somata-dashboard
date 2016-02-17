@@ -17,6 +17,16 @@ body
     font: 14px/1.3em Roboto, Helvetica, sans-serif
     padding: $padding
 
+a
+    text-decoration: none
+    cursor: pointer
+
+@-webkit-keyframes spinIn
+    from
+        -webkit-transform: rotate(0deg)
+    to
+        -webkit-transform: rotate(360deg)
+
 .header
     display: flex
     align-items: center
@@ -24,12 +34,20 @@ body
 
     .logo
         width: 40px
+        height: 40px
         flex-grow: 0
+
         .main
             fill: $colors.light_gray
-            -webkit-transition: fill 0.1s
+            -webkit-transition: fill 0.2s
+
         &:hover .main
             fill: $colors.blue
+
+        &:not(:active)
+            -webkit-animation-name: spinIn
+            -webkit-animation-duration: 0.5s
+            -webkit-animation-delay: 0.01s
 
 .keys
     flex-grow: 1
@@ -42,6 +60,7 @@ body
         border: 1px solid $colors.light_gray
         &.active
             background: $colors.blue
+            border-color: $colors.blue
             color: #fff
 
     a + a
@@ -52,6 +71,7 @@ body
     padding: $padding_small
 
     .id
+        font-weight: bold
         word-break: break-word
 
     .id + .detail
