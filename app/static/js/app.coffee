@@ -60,12 +60,40 @@ ServiceInstance = React.createClass
         svg
             .attr('width', @w)
             .attr('height', @h)
+
+        @svg = svg
         @graph = svg.append('g')
 
         @x = d3.time.scale()
             .range([0, @w])
         @y = d3.scale.linear()
             .range([@h, 0])
+
+    renderAxes: ->
+        x_axis = d3.svg.axis()
+            .scale(@x)
+            .orient('bottom')
+            .ticks(5)
+
+        formats =
+            memory: d3.format('s')
+            cpu: d3.format('f')
+
+        y_axis = d3.svg.axis()
+            .scale(@y)
+            .orient('left')
+            .ticks(5)
+            .tickFormat(formats[@state.key])
+
+        @svg.selectAll('.axis').remove()
+
+        @svg.append('g').attr('class', 'x axis')
+            .call(x_axis)
+            .attr('transform', "translate(0, #{@h-10})")
+
+        @svg.append('g').attr('class', 'y axis')
+            .call(y_axis)
+            .attr('transform', "translate(#{@w}, 0)")
 
     renderGraph: ->
         console.log 'key is', @state.key
@@ -82,6 +110,8 @@ ServiceInstance = React.createClass
             .datum(@state.statuses)
             .attr('class', 'line')
             .attr('d', line)
+
+        @renderAxes()
 
     toggleDetails: ->
         @setState show_details: !@state.show_details
