@@ -109,7 +109,17 @@ a {
   overflow: visible;
 }
 
-.graph path {
+.graph .axis path {
+  fill: none;
+  stroke: none;
+}
+
+.graph .axis text {
+  font-size: 10px;
+  fill: #ccc;
+}
+
+.graph .line {
   fill: none;
   stroke: #36c;
   stroke-width: 2px;

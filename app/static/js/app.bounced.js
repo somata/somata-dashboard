@@ -78,9 +78,22 @@ ServiceInstance = React.createClass({
     this.h = 100;
     svg = d3.select(this.refs.graph).append('svg');
     svg.attr('width', this.w).attr('height', this.h);
+    this.svg = svg;
     this.graph = svg.append('g');
     this.x = d3.time.scale().range([0, this.w]);
     return this.y = d3.scale.linear().range([this.h, 0]);
+  },
+  renderAxes: function() {
+    var formats, x_axis, y_axis;
+    x_axis = d3.svg.axis().scale(this.x).orient('bottom').ticks(5);
+    formats = {
+      memory: d3.format('s'),
+      cpu: d3.format('f')
+    };
+    y_axis = d3.svg.axis().scale(this.y).orient('left').ticks(5).tickFormat(formats[this.state.key]);
+    this.svg.selectAll('.axis').remove();
+    this.svg.append('g').attr('class', 'x axis').call(x_axis).attr('transform', "translate(0, " + (this.h - 10) + ")");
+    return this.svg.append('g').attr('class', 'y axis').call(y_axis).attr('transform', "translate(" + this.w + ", 0)");
   },
   renderGraph: function() {
     var getKey, line, path;
@@ -98,7 +111,8 @@ ServiceInstance = React.createClass({
       };
     })(this));
     this.graph.selectAll('path').remove();
-    return path = this.graph.append('path').datum(this.state.statuses).attr('class', 'line').attr('d', line);
+    path = this.graph.append('path').datum(this.state.statuses).attr('class', 'line').attr('d', line);
+    return this.renderAxes();
   },
   toggleDetails: function() {
     return this.setState({
