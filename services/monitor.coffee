@@ -3,7 +3,7 @@ async = require 'async'
 _ = require 'underscore'
 redis = require('redis').createClient()
 
-POLL_TIME = 1000 * 60
+POLL_TIME = parseInt(process.argv[2]) || 1000 * 60
 
 client = new somata.Client
 
