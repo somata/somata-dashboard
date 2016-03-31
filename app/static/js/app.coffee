@@ -4,6 +4,8 @@ ReactDOM = require 'react-dom'
 somata = require './somata-stream'
 d3 = require 'd3'
 bus = require 'kefir-bus'
+Kefir = require 'kefir'
+moment = require 'moment'
 
 Store = {}
 
@@ -29,101 +31,48 @@ expandStatusExtents = (status) ->
     if status.time > status_extents[1]
         status_extents[1] = status.time
 
-ServiceInstance = React.createClass
+colors = d3.scale.category20()
+
+ServiceGraph = React.createClass
     getInitialState: ->
         show_details: false
         key: 'memory'
 
     componentDidMount: ->
-        @setupGraph()
-        @findStatuses()
+        Dispatcher.key$.onValue @setKey
 
-        Dispatcher.key$.onValue (key) =>
-            console.log 'key', key
-            @setState {key}, @renderGraph
-        Dispatcher.refresh$.onValue @findStatuses
+    componentWillUnmount: ->
+        Dispatcher.key$.offValue @setKey
 
-    findStatuses: ->
-        somata.remote('somata:dashboard:data', 'getStatuses', @props.id).onValue @foundStatuses
-
-    foundStatuses: (statuses) ->
-        console.log statuses[0]
-        statuses.map expandStatusExtents
-        @setState {statuses}, @renderGraph
-
-    setupGraph: ->
-        @w = @refs.graph.clientWidth
-        @h = 100
-
-        svg = d3.select(@refs.graph)
-            .append('svg')
-        svg
-            .attr('width', @w)
-            .attr('height', @h)
-
-        @svg = svg
-        @graph = svg.append('g')
-
-        @x = d3.time.scale()
-            .range([0, @w])
-        @y = d3.scale.linear()
-            .range([@h, 0])
-
-    renderAxes: ->
-        x_axis = d3.svg.axis()
-            .scale(@x)
-            .orient('bottom')
-            .ticks(5)
-
-        formats =
-            memory: d3.format('s')
-            cpu: d3.format('f')
-
-        y_axis = d3.svg.axis()
-            .scale(@y)
-            .orient('left')
-            .ticks(5)
-            .tickFormat(formats[@state.key])
-
-        @svg.selectAll('.axis').remove()
-
-        @svg.append('g').attr('class', 'x axis')
-            .call(x_axis)
-            .attr('transform', "translate(0, #{@h-10})")
-
-        @svg.append('g').attr('class', 'y axis')
-            .call(y_axis)
-            .attr('transform', "translate(#{@w}, 0)")
-
-    renderGraph: ->
-        console.log 'key is', @state.key
-        getKey = get_keys[@state.key]
-        @x.domain(status_extents)
-        @y.domain(d3.extent @state.statuses, getKey)
-
-        line = d3.svg.line()
-            .x (d) => @x d.time
-            .y (d) => @y getKey(d)
-
-        @graph.selectAll('path').remove()
-        path = @graph.append('path')
-            .datum(@state.statuses)
-            .attr('class', 'line')
-            .attr('d', line)
-
-        @renderAxes()
-
-    toggleDetails: ->
-        @setState show_details: !@state.show_details
+    setKey: (key) ->
+        @setState {key}
 
     render: ->
-        <div className='instance'>
-            <div className='details'>
-                <a className='id' onClick=@toggleDetails>{@props.id}</a>
-                {if @state.show_details then service_keys.map (key) =>
-                    <p className='detail'><strong>{key}</strong> {@props.instance[key]}</p>}
-            </div>
-            <div ref='graph' className='graph'></div>
+        x = d3.time.scale()
+            .range([0, 100])
+        y = d3.scale.linear()
+            .range([100, 0])
+
+        x.domain(status_extents)
+
+        getKey = get_keys[@state.key]
+
+        all_statuses = _.flatten(@props.instance_statuses.map ({statuses}) -> statuses)
+        y.domain(d3.extent all_statuses, getKey)
+
+        line = d3.svg.line()
+            .x (d) -> x d.time
+            .y (d) -> y getKey(d)
+
+        <div ref='graph' className='graph'>
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+                {@props.instance_statuses.map ({instance_id, statuses}) =>
+                    line_class = 'line'
+                    if !@props.instance_health[instance_id]
+                        line_class += ' unhealthy'
+                    <path className=line_class d=line(statuses) key=instance_id />
+                }
+            </svg>
         </div>
 
 Keys = React.createClass
@@ -137,66 +86,43 @@ Keys = React.createClass
     render: ->
         <div className='keys'>
             {Object.keys(get_keys).map (key) =>
-                <a onClick=@didChoose(key) className={if key==@state.key then 'active'}>{key}</a>}
+                <a onClick=@didChoose(key) className={if key==@state.key then 'active'} key=key>{key}</a>}
         </div>
 
-Service = React.createClass
-
-    render: ->
-        <div className='service'>
-            <h3 className='name'>{@props.name}</h3>
-            {@props.instances.map (instance) ->
-                <ServiceInstance id=instance.id instance=instance />}
-            {if @props.instances.length == 0
-                <p className='empty'>No healthy instances.</p>}
-        </div>
-
-RegisteredServices = React.createClass
+AllServiceStatuses = React.createClass
     getInitialState: ->
-        services: []
         loading: true
-        show_new: false
-        flattened: true
+        all_statuses: []
 
     componentDidMount: ->
-        somata.remote('registry', 'findServices').onValue @foundServices
-    
+        @findServices()
+
+    findServices: ->
+        somata.remote('registry', 'findServices')
+            .onValue @foundServices
+            .onValue @findAllStatuses
+
     foundServices: (services) ->
-        services = _.pairs(services).map ([name, instances]) -> {name, instances: _.values(instances)}
-        services = _.sortBy services, 'name'
-        healthy_services = services.filter (s) -> s.instances.length > 0
-        unhealthy_services = services.filter (s) -> s.instances.length == 0
-        all_instances = _.flatten services.map (s) -> s.instances
-        @setState {all_instances, healthy_services, unhealthy_services, loading: false}
+        instances = _.flatten(_.values(services))
+        instances = _.flatten instances.map (instance_) -> _.values(instance_)
+        instances = instances.filter (instance_) -> instance_?
+        instance_health = _.object instances.map (instance) -> [instance.id, true]
+        @setState {instance_health}
+
+    findAllStatuses: ->
+        somata.remote('somata:dashboard:data', 'getAllStatuses').onValue @foundAllStatuses
+
+    foundAllStatuses: (all_statuses) ->
+        _.flatten(all_statuses.map ({statuses}) -> statuses).map expandStatusExtents
+        @setState {all_statuses}
 
     render: ->
-        <div>
-            {if @state.show_new
-                <div className='services'>
-                    <NewInstance />
-                </div>
-            }
-
-            {if @state.loading
-                <p className='loading'>Loading...</p>
-
-            else if @state.flattened
-                <div className='boxes'>
-                    {@state.all_instances.map (instance) ->
-                        <div className='box'>
-                            <ServiceInstance id=instance.id instance=instance />
-                        </div>}
-                </div>
-
-            else
-                <div>
-                    <div className='boxes'>
-                        {@state.healthy_services.map (service) ->
-                            <Service name=service.name instances=service.instances />}
-                    </div>
-                    <div className='boxes'>
-                        {@state.unhealthy_services.map (service) ->
-                            <Service name=service.name instances=service.instances />}
+        <div className='boxes'>
+            {_.pairs(_.groupBy(@state.all_statuses, ({instance_id}) -> instance_id.split('~')[0])).map ([service_name, instance_statuses]) =>
+                <div key=service_name className='box'>
+                    <div className='name'>{service_name}</div>
+                    <div className='instance'>
+                        <ServiceGraph service_name=service_name instance_health=@state.instance_health instance_statuses=instance_statuses />
                     </div>
                 </div>
             }
@@ -225,7 +151,7 @@ NewInstance = React.createClass
         </form>
 
     renderInput: (key) ->
-        <p className='detail'>
+        <p className='detail' key=key>
             <input value=@state[key] onChange=@onChange(key) placeholder=key />
         </p>
 
@@ -236,7 +162,7 @@ Logo = React.createClass
     render: ->
         <a className='logo' onClick=@refresh>
             <svg version="1.1" viewBox="0 0 800 800">
-                <g style={'fill-rule': 'evenodd', fill: 'none'}>
+                <g style={fillRule: 'evenodd', fill: 'none'}>
                     <g className='main'>
                         <path d="M400 800C621 800 800 621 800 400 800 179 621 0 400 0 179 0 0 179 0 400 0 621 179 800 400 800ZM400 722C578 722 722 578 722 400 722 222 578 78 400 78 222 78 78 222 78 400 78 578 222 722 400 722Z"/>
                         <circle cx="262" cy="481" r="83"/>
@@ -255,7 +181,7 @@ App = React.createClass
                 <Logo />
                 <Keys />
             </div>
-            <RegisteredServices />
+            <AllServiceStatuses />
         </div>
 
 somata.authenticate (err, user) ->
