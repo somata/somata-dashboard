@@ -1,5 +1,5 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-var App, Dispatcher, Keys, Logo, NewInstance, React, ReactDOM, RegisteredServices, Service, ServiceInstance, Store, bus, d3, expandStatusExtents, get_keys, service_keys, somata, status_extents, _;
+var AllServiceStatuses, App, Dispatcher, Kefir, Keys, Logo, NewInstance, React, ReactDOM, ServiceGraph, Store, bus, colors, d3, expandStatusExtents, get_keys, moment, service_keys, somata, status_extents, _;
 
 _ = require('underscore');
 
@@ -12,6 +12,10 @@ somata = require('./somata-stream');
 d3 = require('d3');
 
 bus = require('kefir-bus');
+
+Kefir = require('kefir');
+
+moment = require('moment');
 
 Store = {};
 
@@ -42,7 +46,9 @@ expandStatusExtents = function(status) {
   }
 };
 
-ServiceInstance = React.createClass({
+colors = d3.scale.category20();
+
+ServiceGraph = React.createClass({
   getInitialState: function() {
     return {
       show_details: false,
@@ -50,93 +56,54 @@ ServiceInstance = React.createClass({
     };
   },
   componentDidMount: function() {
-    this.setupGraph();
-    this.findStatuses();
-    Dispatcher.key$.onValue((function(_this) {
-      return function(key) {
-        console.log('key', key);
-        return _this.setState({
-          key: key
-        }, _this.renderGraph);
-      };
-    })(this));
-    return Dispatcher.refresh$.onValue(this.findStatuses);
+    return Dispatcher.key$.onValue(this.setKey);
   },
-  findStatuses: function() {
-    return somata.remote('somata:dashboard:data', 'getStatuses', this.props.id).onValue(this.foundStatuses);
+  componentWillUnmount: function() {
+    return Dispatcher.key$.offValue(this.setKey);
   },
-  foundStatuses: function(statuses) {
-    console.log(statuses[0]);
-    statuses.map(expandStatusExtents);
+  setKey: function(key) {
     return this.setState({
-      statuses: statuses
-    }, this.renderGraph);
-  },
-  setupGraph: function() {
-    var svg;
-    this.w = this.refs.graph.clientWidth;
-    this.h = 100;
-    svg = d3.select(this.refs.graph).append('svg');
-    svg.attr('width', this.w).attr('height', this.h);
-    this.svg = svg;
-    this.graph = svg.append('g');
-    this.x = d3.time.scale().range([0, this.w]);
-    return this.y = d3.scale.linear().range([this.h, 0]);
-  },
-  renderAxes: function() {
-    var formats, x_axis, y_axis;
-    x_axis = d3.svg.axis().scale(this.x).orient('bottom').ticks(5);
-    formats = {
-      memory: d3.format('s'),
-      cpu: d3.format('f')
-    };
-    y_axis = d3.svg.axis().scale(this.y).orient('left').ticks(5).tickFormat(formats[this.state.key]);
-    this.svg.selectAll('.axis').remove();
-    this.svg.append('g').attr('class', 'x axis').call(x_axis).attr('transform', "translate(0, " + (this.h - 10) + ")");
-    return this.svg.append('g').attr('class', 'y axis').call(y_axis).attr('transform', "translate(" + this.w + ", 0)");
-  },
-  renderGraph: function() {
-    var getKey, line, path;
-    console.log('key is', this.state.key);
-    getKey = get_keys[this.state.key];
-    this.x.domain(status_extents);
-    this.y.domain(d3.extent(this.state.statuses, getKey));
-    line = d3.svg.line().x((function(_this) {
-      return function(d) {
-        return _this.x(d.time);
-      };
-    })(this)).y((function(_this) {
-      return function(d) {
-        return _this.y(getKey(d));
-      };
-    })(this));
-    this.graph.selectAll('path').remove();
-    path = this.graph.append('path').datum(this.state.statuses).attr('class', 'line').attr('d', line);
-    return this.renderAxes();
-  },
-  toggleDetails: function() {
-    return this.setState({
-      show_details: !this.state.show_details
+      key: key
     });
   },
   render: function() {
+    var all_statuses, getKey, line, x, y;
+    x = d3.time.scale().range([0, 100]);
+    y = d3.scale.linear().range([100, 0]);
+    x.domain(status_extents);
+    getKey = get_keys[this.state.key];
+    all_statuses = _.flatten(this.props.instance_statuses.map(function(_arg) {
+      var statuses;
+      statuses = _arg.statuses;
+      return statuses;
+    }));
+    y.domain(d3.extent(all_statuses, getKey));
+    line = d3.svg.line().x(function(d) {
+      return x(d.time);
+    }).y(function(d) {
+      return y(getKey(d));
+    });
     return React.createElement("div", {
-      "className": 'instance'
-    }, React.createElement("div", {
-      "className": 'details'
-    }, React.createElement("a", {
-      "className": 'id',
-      "onClick": this.toggleDetails
-    }, this.props.id), (this.state.show_details ? service_keys.map((function(_this) {
-      return function(key) {
-        return React.createElement("p", {
-          "className": 'detail'
-        }, React.createElement("strong", null, key), " ", _this.props.instance[key]);
-      };
-    })(this)) : void 0)), React.createElement("div", {
       "ref": 'graph',
       "className": 'graph'
-    }));
+    }, React.createElement("svg", {
+      "viewBox": "0 0 100 100",
+      "preserveAspectRatio": "none"
+    }, this.props.instance_statuses.map((function(_this) {
+      return function(_arg) {
+        var instance_id, line_class, statuses;
+        instance_id = _arg.instance_id, statuses = _arg.statuses;
+        line_class = 'line';
+        if (!_this.props.instance_health[instance_id]) {
+          line_class += ' unhealthy';
+        }
+        return React.createElement("path", {
+          "className": line_class,
+          "d": line(statuses),
+          "key": instance_id
+        });
+      };
+    })(this))));
   }
 });
 
@@ -163,98 +130,81 @@ Keys = React.createClass({
       return function(key) {
         return React.createElement("a", {
           "onClick": _this.didChoose(key),
-          "className": (key === _this.state.key ? 'active' : void 0)
+          "className": (key === _this.state.key ? 'active' : void 0),
+          "key": key
         }, key);
       };
     })(this)));
   }
 });
 
-Service = React.createClass({
-  render: function() {
-    return React.createElement("div", {
-      "className": 'service'
-    }, React.createElement("h3", {
-      "className": 'name'
-    }, this.props.name), this.props.instances.map(function(instance) {
-      return React.createElement(ServiceInstance, {
-        "id": instance.id,
-        "instance": instance
-      });
-    }), (this.props.instances.length === 0 ? React.createElement("p", {
-      "className": 'empty'
-    }, "No healthy instances.") : void 0));
-  }
-});
-
-RegisteredServices = React.createClass({
+AllServiceStatuses = React.createClass({
   getInitialState: function() {
     return {
-      services: [],
       loading: true,
-      show_new: false,
-      flattened: true
+      all_statuses: []
     };
   },
   componentDidMount: function() {
-    return somata.remote('registry', 'findServices').onValue(this.foundServices);
+    return this.findServices();
+  },
+  findServices: function() {
+    return somata.remote('registry', 'findServices').onValue(this.foundServices).onValue(this.findAllStatuses);
   },
   foundServices: function(services) {
-    var all_instances, healthy_services, unhealthy_services;
-    services = _.pairs(services).map(function(_arg) {
-      var instances, name;
-      name = _arg[0], instances = _arg[1];
-      return {
-        name: name,
-        instances: _.values(instances)
-      };
+    var instance_health, instances;
+    instances = _.flatten(_.values(services));
+    instances = _.flatten(instances.map(function(instance_) {
+      return _.values(instance_);
+    }));
+    instances = instances.filter(function(instance_) {
+      return instance_ != null;
     });
-    services = _.sortBy(services, 'name');
-    healthy_services = services.filter(function(s) {
-      return s.instances.length > 0;
-    });
-    unhealthy_services = services.filter(function(s) {
-      return s.instances.length === 0;
-    });
-    all_instances = _.flatten(services.map(function(s) {
-      return s.instances;
+    instance_health = _.object(instances.map(function(instance) {
+      return [instance.id, true];
     }));
     return this.setState({
-      all_instances: all_instances,
-      healthy_services: healthy_services,
-      unhealthy_services: unhealthy_services,
-      loading: false
+      instance_health: instance_health
+    });
+  },
+  findAllStatuses: function() {
+    return somata.remote('somata:dashboard:data', 'getAllStatuses').onValue(this.foundAllStatuses);
+  },
+  foundAllStatuses: function(all_statuses) {
+    _.flatten(all_statuses.map(function(_arg) {
+      var statuses;
+      statuses = _arg.statuses;
+      return statuses;
+    })).map(expandStatusExtents);
+    return this.setState({
+      all_statuses: all_statuses
     });
   },
   render: function() {
-    return React.createElement("div", null, (this.state.show_new ? React.createElement("div", {
-      "className": 'services'
-    }, React.createElement(NewInstance, null)) : void 0), (this.state.loading ? React.createElement("p", {
-      "className": 'loading'
-    }, "Loading...") : this.state.flattened ? React.createElement("div", {
+    return React.createElement("div", {
       "className": 'boxes'
-    }, this.state.all_instances.map(function(instance) {
-      return React.createElement("div", {
-        "className": 'box'
-      }, React.createElement(ServiceInstance, {
-        "id": instance.id,
-        "instance": instance
-      }));
-    })) : React.createElement("div", null, React.createElement("div", {
-      "className": 'boxes'
-    }, this.state.healthy_services.map(function(service) {
-      return React.createElement(Service, {
-        "name": service.name,
-        "instances": service.instances
-      });
-    })), React.createElement("div", {
-      "className": 'boxes'
-    }, this.state.unhealthy_services.map(function(service) {
-      return React.createElement(Service, {
-        "name": service.name,
-        "instances": service.instances
-      });
-    })))));
+    }, _.pairs(_.groupBy(this.state.all_statuses, function(_arg) {
+      var instance_id;
+      instance_id = _arg.instance_id;
+      return instance_id.split('~')[0];
+    })).map((function(_this) {
+      return function(_arg) {
+        var instance_statuses, service_name;
+        service_name = _arg[0], instance_statuses = _arg[1];
+        return React.createElement("div", {
+          "key": service_name,
+          "className": 'box'
+        }, React.createElement("div", {
+          "className": 'name'
+        }, service_name), React.createElement("div", {
+          "className": 'instance'
+        }, React.createElement(ServiceGraph, {
+          "service_name": service_name,
+          "instance_health": _this.state.instance_health,
+          "instance_statuses": instance_statuses
+        })));
+      };
+    })(this)));
   }
 });
 
@@ -285,7 +235,8 @@ NewInstance = React.createClass({
   },
   renderInput: function(key) {
     return React.createElement("p", {
-      "className": 'detail'
+      "className": 'detail',
+      "key": key
     }, React.createElement("input", {
       "value": this.state[key],
       "onChange": this.onChange(key),
@@ -307,7 +258,7 @@ Logo = React.createClass({
       "viewBox": "0 0 800 800"
     }, React.createElement("g", {
       "style": {
-        'fill-rule': 'evenodd',
+        fillRule: 'evenodd',
         fill: 'none'
       }
     }, React.createElement("g", {
@@ -333,7 +284,7 @@ App = React.createClass({
       "id": "main"
     }, React.createElement("div", {
       "className": "header"
-    }, React.createElement(Logo, null), React.createElement(Keys, null)), React.createElement(RegisteredServices, null));
+    }, React.createElement(Logo, null), React.createElement(Keys, null)), React.createElement(AllServiceStatuses, null));
   }
 });
 
@@ -344,7 +295,7 @@ somata.authenticate(function(err, user) {
 
 
 
-},{"./somata-stream":4,"d3":5,"kefir-bus":33,"react":164,"react-dom":35,"underscore":165}],2:[function(require,module,exports){
+},{"./somata-stream":4,"d3":5,"kefir":34,"kefir-bus":33,"moment":35,"react":165,"react-dom":36,"underscore":166}],2:[function(require,module,exports){
 // shim for using process in browser
 
 var process = module.exports = {};
@@ -11411,5056 +11362,6511 @@ function kefirBus() {
 }
 
 },{"kefir":34}],34:[function(require,module,exports){
-/*! Kefir.js v2.8.1
+/*! Kefir.js v3.2.1
  *  https://github.com/rpominov/kefir
  */
 
-(function webpackUniversalModuleDefinition(root, factory) {
-	if(typeof exports === 'object' && typeof module === 'object')
-		module.exports = factory();
-	else if(typeof define === 'function' && define.amd)
-		define(factory);
-	else if(typeof exports === 'object')
-		exports["Kefir"] = factory();
-	else
-		root["Kefir"] = factory();
-})(this, function() {
-return /******/ (function(modules) { // webpackBootstrap
-/******/ 	// The module cache
-/******/ 	var installedModules = {};
-
-/******/ 	// The require function
-/******/ 	function __webpack_require__(moduleId) {
-
-/******/ 		// Check if module is in cache
-/******/ 		if(installedModules[moduleId])
-/******/ 			return installedModules[moduleId].exports;
-
-/******/ 		// Create a new module (and put it into the cache)
-/******/ 		var module = installedModules[moduleId] = {
-/******/ 			exports: {},
-/******/ 			id: moduleId,
-/******/ 			loaded: false
-/******/ 		};
-
-/******/ 		// Execute the module function
-/******/ 		modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
-
-/******/ 		// Flag the module as loaded
-/******/ 		module.loaded = true;
-
-/******/ 		// Return the exports of the module
-/******/ 		return module.exports;
-/******/ 	}
-
-
-/******/ 	// expose the modules object (__webpack_modules__)
-/******/ 	__webpack_require__.m = modules;
-
-/******/ 	// expose the module cache
-/******/ 	__webpack_require__.c = installedModules;
-
-/******/ 	// __webpack_public_path__
-/******/ 	__webpack_require__.p = "";
-
-/******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(0);
-/******/ })
-/************************************************************************/
-/******/ ([
-/* 0 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var Kefir = module.exports = {};
-	Kefir.Kefir = Kefir;
-
-	var Observable = Kefir.Observable = __webpack_require__(1);
-	Kefir.Stream = __webpack_require__(6);
-	Kefir.Property = __webpack_require__(7);
-
-	// Create a stream
-	// -----------------------------------------------------------------------------
-
-	// () -> Stream
-	Kefir.never = __webpack_require__(8);
-
-	// (number, any) -> Stream
-	Kefir.later = __webpack_require__(9);
-
-	// (number, any) -> Stream
-	Kefir.interval = __webpack_require__(11);
-
-	// (number, Array<any>) -> Stream
-	Kefir.sequentially = __webpack_require__(12);
-
-	// (number, Function) -> Stream
-	Kefir.fromPoll = __webpack_require__(13);
-
-	// (number, Function) -> Stream
-	Kefir.withInterval = __webpack_require__(14);
-
-	// (Function) -> Stream
-	Kefir.fromCallback = __webpack_require__(16);
-
-	// (Function) -> Stream
-	Kefir.fromNodeCallback = __webpack_require__(18);
-
-	// Target = {addEventListener, removeEventListener}|{addListener, removeListener}|{on, off}
-	// (Target, string, Function|undefined) -> Stream
-	Kefir.fromEvents = __webpack_require__(19);
-
-	// (Function) -> Stream
-	Kefir.stream = __webpack_require__(17);
-
-	// Create a property
-	// -----------------------------------------------------------------------------
-
-	// (any) -> Property
-	Kefir.constant = __webpack_require__(22);
-
-	// (any) -> Property
-	Kefir.constantError = __webpack_require__(23);
-
-	// (Promise) -> Property
-	Kefir.fromPromise = __webpack_require__(24);
-
-	// Convert observables
-	// -----------------------------------------------------------------------------
-
-	// (Stream|Property, Function|undefined) -> Property
-	var toProperty = __webpack_require__(25);
-	Observable.prototype.toProperty = function (fn) {
-	  return toProperty(this, fn);
-	};
-
-	// (Stream|Property) -> Stream
-	var changes = __webpack_require__(27);
-	Observable.prototype.changes = function () {
-	  return changes(this);
-	};
-
-	// Subscribe / add side effects
-	// -----------------------------------------------------------------------------
-
-	// (Stream|Property, Function|undefined) -> Promise
-	var toPromise = __webpack_require__(28);
-	Observable.prototype.toPromise = function (Promise) {
-	  return toPromise(this, Promise);
-	};
-
-	// Modify an observable
-	// -----------------------------------------------------------------------------
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var map = __webpack_require__(29);
-	Observable.prototype.map = function (fn) {
-	  return map(this, fn);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var filter = __webpack_require__(30);
-	Observable.prototype.filter = function (fn) {
-	  return filter(this, fn);
-	};
-
-	// (Stream, number) -> Stream
-	// (Property, number) -> Property
-	var take = __webpack_require__(31);
-	Observable.prototype.take = function (n) {
-	  return take(this, n);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var takeWhile = __webpack_require__(32);
-	Observable.prototype.takeWhile = function (fn) {
-	  return takeWhile(this, fn);
-	};
-
-	// (Stream) -> Stream
-	// (Property) -> Property
-	var last = __webpack_require__(33);
-	Observable.prototype.last = function () {
-	  return last(this);
-	};
-
-	// (Stream, number) -> Stream
-	// (Property, number) -> Property
-	var skip = __webpack_require__(34);
-	Observable.prototype.skip = function (n) {
-	  return skip(this, n);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var skipWhile = __webpack_require__(35);
-	Observable.prototype.skipWhile = function (fn) {
-	  return skipWhile(this, fn);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var skipDuplicates = __webpack_require__(36);
-	Observable.prototype.skipDuplicates = function (fn) {
-	  return skipDuplicates(this, fn);
-	};
-
-	// (Stream, Function|falsey, any|undefined) -> Stream
-	// (Property, Function|falsey, any|undefined) -> Property
-	var diff = __webpack_require__(37);
-	Observable.prototype.diff = function (fn, seed) {
-	  return diff(this, fn, seed);
-	};
-
-	// (Stream|Property, Function, any|undefined) -> Property
-	var scan = __webpack_require__(38);
-	Observable.prototype.scan = function (fn, seed) {
-	  return scan(this, fn, seed);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var flatten = __webpack_require__(39);
-	Observable.prototype.flatten = function (fn) {
-	  return flatten(this, fn);
-	};
-
-	// (Stream, number) -> Stream
-	// (Property, number) -> Property
-	var delay = __webpack_require__(40);
-	Observable.prototype.delay = function (wait) {
-	  return delay(this, wait);
-	};
-
-	// Options = {leading: boolean|undefined, trailing: boolean|undefined}
-	// (Stream, number, Options|undefined) -> Stream
-	// (Property, number, Options|undefined) -> Property
-	var throttle = __webpack_require__(41);
-	Observable.prototype.throttle = function (wait, options) {
-	  return throttle(this, wait, options);
-	};
-
-	// Options = {immediate: boolean|undefined}
-	// (Stream, number, Options|undefined) -> Stream
-	// (Property, number, Options|undefined) -> Property
-	var debounce = __webpack_require__(43);
-	Observable.prototype.debounce = function (wait, options) {
-	  return debounce(this, wait, options);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var valuesToErrors = __webpack_require__(44);
-	Observable.prototype.valuesToErrors = function (fn) {
-	  return valuesToErrors(this, fn);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var errorsToValues = __webpack_require__(45);
-	Observable.prototype.errorsToValues = function (fn) {
-	  return errorsToValues(this, fn);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var mapErrors = __webpack_require__(46);
-	Observable.prototype.mapErrors = function (fn) {
-	  return mapErrors(this, fn);
-	};
-
-	// (Stream, Function|undefined) -> Stream
-	// (Property, Function|undefined) -> Property
-	var filterErrors = __webpack_require__(47);
-	Observable.prototype.filterErrors = function (fn) {
-	  return filterErrors(this, fn);
-	};
-
-	// (Stream) -> Stream
-	// (Property) -> Property
-	var endOnError = __webpack_require__(48);
-	Observable.prototype.endOnError = function () {
-	  return endOnError(this);
-	};
-
-	// (Stream) -> Stream
-	// (Property) -> Property
-	var skipValues = __webpack_require__(49);
-	Observable.prototype.skipValues = function () {
-	  return skipValues(this);
-	};
-
-	// (Stream) -> Stream
-	// (Property) -> Property
-	var skipErrors = __webpack_require__(50);
-	Observable.prototype.skipErrors = function () {
-	  return skipErrors(this);
-	};
-
-	// (Stream) -> Stream
-	// (Property) -> Property
-	var skipEnd = __webpack_require__(51);
-	Observable.prototype.skipEnd = function () {
-	  return skipEnd(this);
-	};
-
-	// (Stream, Function) -> Stream
-	// (Property, Function) -> Property
-	var beforeEnd = __webpack_require__(52);
-	Observable.prototype.beforeEnd = function (fn) {
-	  return beforeEnd(this, fn);
-	};
-
-	// (Stream, number, number|undefined) -> Stream
-	// (Property, number, number|undefined) -> Property
-	var slidingWindow = __webpack_require__(53);
-	Observable.prototype.slidingWindow = function (max, min) {
-	  return slidingWindow(this, max, min);
-	};
-
-	// Options = {flushOnEnd: boolean|undefined}
-	// (Stream, Function|falsey, Options|undefined) -> Stream
-	// (Property, Function|falsey, Options|undefined) -> Property
-	var bufferWhile = __webpack_require__(54);
-	Observable.prototype.bufferWhile = function (fn, options) {
-	  return bufferWhile(this, fn, options);
-	};
-
-	// (Stream, Function) -> Stream
-	// (Property, Function) -> Property
-	var transduce = __webpack_require__(55);
-	Observable.prototype.transduce = function (transducer) {
-	  return transduce(this, transducer);
-	};
-
-	// (Stream, Function) -> Stream
-	// (Property, Function) -> Property
-	var withHandler = __webpack_require__(56);
-	Observable.prototype.withHandler = function (fn) {
-	  return withHandler(this, fn);
-	};
-
-	// Combine observables
-	// -----------------------------------------------------------------------------
-
-	// (Array<Stream|Property>, Function|undefiend) -> Stream
-	// (Array<Stream|Property>, Array<Stream|Property>, Function|undefiend) -> Stream
-	var combine = Kefir.combine = __webpack_require__(57);
-	Observable.prototype.combine = function (other, combinator) {
-	  return combine([this, other], combinator);
-	};
-
-	// (Array<Stream|Property>, Function|undefiend) -> Stream
-	var zip = Kefir.zip = __webpack_require__(58);
-	Observable.prototype.zip = function (other, combinator) {
-	  return zip([this, other], combinator);
-	};
-
-	// (Array<Stream|Property>) -> Stream
-	var merge = Kefir.merge = __webpack_require__(59);
-	Observable.prototype.merge = function (other) {
-	  return merge([this, other]);
-	};
-
-	// (Array<Stream|Property>) -> Stream
-	var concat = Kefir.concat = __webpack_require__(61);
-	Observable.prototype.concat = function (other) {
-	  return concat([this, other]);
-	};
-
-	// () -> Pool
-	var Pool = Kefir.Pool = __webpack_require__(63);
-	Kefir.pool = function () {
-	  return new Pool();
-	};
-
-	// (Function) -> Stream
-	Kefir.repeat = __webpack_require__(62);
-
-	// Options = {concurLim: number|undefined, queueLim: number|undefined, drop: 'old'|'new'|undefiend}
-	// (Stream|Property, Function|falsey, Options|undefined) -> Stream
-	var FlatMap = __webpack_require__(64);
-	Observable.prototype.flatMap = function (fn) {
-	  return new FlatMap(this, fn).setName(this, 'flatMap');
-	};
-	Observable.prototype.flatMapLatest = function (fn) {
-	  return new FlatMap(this, fn, { concurLim: 1, drop: 'old' }).setName(this, 'flatMapLatest');
-	};
-	Observable.prototype.flatMapFirst = function (fn) {
-	  return new FlatMap(this, fn, { concurLim: 1 }).setName(this, 'flatMapFirst');
-	};
-	Observable.prototype.flatMapConcat = function (fn) {
-	  return new FlatMap(this, fn, { queueLim: -1, concurLim: 1 }).setName(this, 'flatMapConcat');
-	};
-	Observable.prototype.flatMapConcurLimit = function (fn, limit) {
-	  return new FlatMap(this, fn, { queueLim: -1, concurLim: limit }).setName(this, 'flatMapConcurLimit');
-	};
-
-	// (Stream|Property, Function|falsey) -> Stream
-	var FlatMapErrors = __webpack_require__(65);
-	Observable.prototype.flatMapErrors = function (fn) {
-	  return new FlatMapErrors(this, fn).setName(this, 'flatMapErrors');
-	};
-
-	// Combine two observables
-	// -----------------------------------------------------------------------------
-
-	// (Stream, Stream|Property) -> Stream
-	// (Property, Stream|Property) -> Property
-	var filterBy = __webpack_require__(66);
-	Observable.prototype.filterBy = function (other) {
-	  return filterBy(this, other);
-	};
-
-	// (Stream, Stream|Property, Function|undefiend) -> Stream
-	// (Property, Stream|Property, Function|undefiend) -> Property
-	var sampledBy2items = __webpack_require__(68);
-	Observable.prototype.sampledBy = function (other, combinator) {
-	  return sampledBy2items(this, other, combinator);
-	};
-
-	// (Stream, Stream|Property) -> Stream
-	// (Property, Stream|Property) -> Property
-	var skipUntilBy = __webpack_require__(69);
-	Observable.prototype.skipUntilBy = function (other) {
-	  return skipUntilBy(this, other);
-	};
-
-	// (Stream, Stream|Property) -> Stream
-	// (Property, Stream|Property) -> Property
-	var takeUntilBy = __webpack_require__(70);
-	Observable.prototype.takeUntilBy = function (other) {
-	  return takeUntilBy(this, other);
-	};
-
-	// Options = {flushOnEnd: boolean|undefined}
-	// (Stream, Stream|Property, Options|undefined) -> Stream
-	// (Property, Stream|Property, Options|undefined) -> Property
-	var bufferBy = __webpack_require__(71);
-	Observable.prototype.bufferBy = function (other, options) {
-	  return bufferBy(this, other, options);
-	};
-
-	// Options = {flushOnEnd: boolean|undefined}
-	// (Stream, Stream|Property, Options|undefined) -> Stream
-	// (Property, Stream|Property, Options|undefined) -> Property
-	var bufferWhileBy = __webpack_require__(72);
-	Observable.prototype.bufferWhileBy = function (other, options) {
-	  return bufferWhileBy(this, other, options);
-	};
-
-	// (Stream|Property, Stream|Property) -> Property
-	var awaiting = __webpack_require__(73);
-	Observable.prototype.awaiting = function (other) {
-	  return awaiting(this, other);
-	};
-
-	// Deprecated
-	// -----------------------------------------------------------------------------
-
-	Kefir.DEPRECATION_WARNINGS = true;
-	function deprecated(name, alt, fn) {
-	  return function () {
-	    if (Kefir.DEPRECATION_WARNINGS && typeof console !== 'undefined' && console.log) {
-
-	      var message = 'Method `' + name + '` is deprecated, and to be removed in v3.0.0.\nUse `' + alt + '` instead.\nTo disable all warnings like this set `Kefir.DEPRECATION_WARNINGS = false`.';
-
-	      console.log(message);
-	    }
-	    return fn.apply(this, arguments);
-	  };
-	}
-
-	// () -> Emitter
-	var Emitter = Kefir.Emitter = __webpack_require__(74);
-	Kefir.emitter = deprecated('Kefir.emitter()', 'Kefir.stream()', function () {
-	  return new Emitter();
-	});
-
-	// () -> Bus
-	var Bus = Kefir.Bus = __webpack_require__(75);
-	Kefir.bus = deprecated('Kefir.bus()', 'Kefir.pool() or Kefir.stream()', function () {
-	  return new Bus();
-	});
-
-	// (Stream, Function, any|undefined) -> Stream
-	// (Property, Function, any|undefined) -> Property
-	var reduce = __webpack_require__(76);
-	Observable.prototype.reduce = deprecated('.reduce(fn, seed)', '.scan(fn, seed).last()', function (fn, seed) {
-	  return reduce(this, fn, seed);
-	});
-
-	// (Array<Stream|Property>, Array<Stream|Property>, Function|undefined) -> Stream
-	var sampledByManyItems = __webpack_require__(77);
-	Kefir.sampledBy = deprecated('Kefir.sampledBy()', 'Kefir.combine()', sampledByManyItems);
-
-	// (number, Array<any>) -> Stream
-	var repeatedly = __webpack_require__(78);
-	Kefir.repeatedly = deprecated('Kefir.repeatedly()', 'Kefir.repeat(() => Kefir.sequentially(...)})', repeatedly);
-
-	// (Stream, any) -> Stream
-	// (Property, any) -> Property
-	var mapTo = __webpack_require__(79);
-	Observable.prototype.mapTo = deprecated('.mapTo()', '.map(() => value)', function (x) {
-	  return mapTo(this, x);
-	});
-
-	// (Stream, Function) -> Stream
-	// (Property, Function) -> Property
-	var tap = __webpack_require__(80);
-	Observable.prototype.tap = deprecated('.tap()', '.map((v) => {fn(v); return v})', function (fn) {
-	  return tap(this, fn);
-	});
-
-	// (Stream, string) -> Stream
-	// (Property, string) -> Property
-	var pluck = __webpack_require__(81);
-	Observable.prototype.pluck = deprecated('.pluck()', '.map((x) => x.foo)', function (propName) {
-	  return pluck(this, propName);
-	});
-
-	// (Stream, string, Array) -> Stream
-	// (Property, string, Array) -> Property
-	var invoke = __webpack_require__(82);
-	Observable.prototype.invoke = deprecated('.invoke()', '.map((x) => x.foo())', function (methodName) {
-	  for (var _len = arguments.length, args = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-	    args[_key - 1] = arguments[_key];
-	  }
-
-	  return invoke(this, methodName, args);
-	});
-
-	// (Stream) -> Stream
-	// (Property) -> Property
-	var timestamp = __webpack_require__(83);
-	Observable.prototype.timestamp = deprecated('.timestamp()', '.map((x) => {value: x, time: Date.now()})', function () {
-	  return timestamp(this);
-	});
-
-	// (Array<Stream|Property>) -> Stream
-	var and = __webpack_require__(84);
-	Kefir.and = deprecated('Kefir.and()', 'Kefir.combine([a, b], (a, b) => a && b)', and);
-	Observable.prototype.and = deprecated('.and()', '.combine(other, (a, b) => a && b)', function (other) {
-	  return and([this, other]);
-	});
-
-	// (Array<Stream|Property>) -> Stream
-	var or = __webpack_require__(85);
-	Kefir.or = deprecated('Kefir.or()', 'Kefir.combine([a, b], (a, b) => a || b)', or);
-	Observable.prototype.or = deprecated('.or()', '.combine(other, (a, b) => a || b)', function (other) {
-	  return or([this, other]);
-	});
-
-	// (Stream) -> Stream
-	// (Property) -> Property
-	var not = __webpack_require__(86);
-	Observable.prototype.not = deprecated('.not()', '.map((x) => !x)', function () {
-	  return not(this);
-	});
-
-	// (Function, Function, Function|undefined) -> Stream
-	var fromSubUnsub = __webpack_require__(20);
-	Kefir.fromSubUnsub = deprecated('.fromSubUnsub()', 'Kefir.stream()', fromSubUnsub);
-
-	// (Stream, Stream|Property) -> Stream
-	// (Property, Stream|Property) -> Property
-	var takeWhileBy = __webpack_require__(87);
-	Observable.prototype.takeWhileBy = deprecated('.takeWhileBy(foo)', '.skipUntilBy(foo.filter((x) => !x))', function (other) {
-	  return takeWhileBy(this, other);
-	});
-
-	// (Stream, Stream|Property) -> Stream
-	// (Property, Stream|Property) -> Property
-	var skipWhileBy = __webpack_require__(88);
-	Observable.prototype.skipWhileBy = deprecated('.skipWhileBy(foo)', '.takeUntilBy(foo.filter((x) => !x))', function (other) {
-	  return skipWhileBy(this, other);
-	});
-
-/***/ },
-/* 1 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var extend = _require.extend;
-
-	var _require2 = __webpack_require__(3);
-
-	var VALUE = _require2.VALUE;
-	var ERROR = _require2.ERROR;
-	var ANY = _require2.ANY;
-	var END = _require2.END;
-
-	var _require3 = __webpack_require__(4);
-
-	var Dispatcher = _require3.Dispatcher;
-	var callSubscriber = _require3.callSubscriber;
-
-	var _require4 = __webpack_require__(5);
-
-	var findByPred = _require4.findByPred;
-
-	function Observable() {
-	  this._dispatcher = new Dispatcher();
-	  this._active = false;
-	  this._alive = true;
-	  this._activating = false;
-	  this._logHandlers = null;
-	}
-
-	extend(Observable.prototype, {
-
-	  _name: 'observable',
-
-	  _onActivation: function _onActivation() {},
-	  _onDeactivation: function _onDeactivation() {},
-
-	  _setActive: function _setActive(active) {
-	    if (this._active !== active) {
-	      this._active = active;
-	      if (active) {
-	        this._activating = true;
-	        this._onActivation();
-	        this._activating = false;
-	      } else {
-	        this._onDeactivation();
-	      }
-	    }
-	  },
-
-	  _clear: function _clear() {
-	    this._setActive(false);
-	    this._dispatcher.cleanup();
-	    this._dispatcher = null;
-	    this._logHandlers = null;
-	  },
-
-	  _emit: function _emit(type, x) {
-	    switch (type) {
-	      case VALUE:
-	        return this._emitValue(x);
-	      case ERROR:
-	        return this._emitError(x);
-	      case END:
-	        return this._emitEnd();
-	    }
-	  },
-
-	  _emitValue: function _emitValue(value) {
-	    if (this._alive) {
-	      this._dispatcher.dispatch({ type: VALUE, value: value, current: this._activating });
-	    }
-	  },
-
-	  _emitError: function _emitError(value) {
-	    if (this._alive) {
-	      this._dispatcher.dispatch({ type: ERROR, value: value, current: this._activating });
-	    }
-	  },
-
-	  _emitEnd: function _emitEnd() {
-	    if (this._alive) {
-	      this._alive = false;
-	      this._dispatcher.dispatch({ type: END, current: this._activating });
-	      this._clear();
-	    }
-	  },
-
-	  _on: function _on(type, fn) {
-	    if (this._alive) {
-	      this._dispatcher.add(type, fn);
-	      this._setActive(true);
-	    } else {
-	      callSubscriber(type, fn, { type: END, current: true });
-	    }
-	    return this;
-	  },
-
-	  _off: function _off(type, fn) {
-	    if (this._alive) {
-	      var count = this._dispatcher.remove(type, fn);
-	      if (count === 0) {
-	        this._setActive(false);
-	      }
-	    }
-	    return this;
-	  },
-
-	  onValue: function onValue(fn) {
-	    return this._on(VALUE, fn);
-	  },
-	  onError: function onError(fn) {
-	    return this._on(ERROR, fn);
-	  },
-	  onEnd: function onEnd(fn) {
-	    return this._on(END, fn);
-	  },
-	  onAny: function onAny(fn) {
-	    return this._on(ANY, fn);
-	  },
-
-	  offValue: function offValue(fn) {
-	    return this._off(VALUE, fn);
-	  },
-	  offError: function offError(fn) {
-	    return this._off(ERROR, fn);
-	  },
-	  offEnd: function offEnd(fn) {
-	    return this._off(END, fn);
-	  },
-	  offAny: function offAny(fn) {
-	    return this._off(ANY, fn);
-	  },
-
-	  // A and B must be subclasses of Stream and Property (order doesn't matter)
-	  _ofSameType: function _ofSameType(A, B) {
-	    return A.prototype.getType() === this.getType() ? A : B;
-	  },
-
-	  setName: function setName(sourceObs, /* optional */selfName) {
-	    this._name = selfName ? sourceObs._name + '.' + selfName : sourceObs;
-	    return this;
-	  },
-
-	  log: function log() {
-	    var name = arguments.length <= 0 || arguments[0] === undefined ? this.toString() : arguments[0];
-
-	    var handler = function handler(event) {
-	      var type = '<' + event.type + (event.current ? ':current' : '') + '>';
-	      if (event.type === END) {
-	        console.log(name, type);
-	      } else {
-	        console.log(name, type, event.value);
-	      }
-	    };
-
-	    if (this._alive) {
-	      if (!this._logHandlers) {
-	        this._logHandlers = [];
-	      }
-	      this._logHandlers.push({ name: name, handler: handler });
-	    }
-
-	    this.onAny(handler);
-
-	    return this;
-	  },
-
-	  offLog: function offLog() {
-	    var name = arguments.length <= 0 || arguments[0] === undefined ? this.toString() : arguments[0];
-
-	    if (this._logHandlers) {
-	      var handlerIndex = findByPred(this._logHandlers, function (obj) {
-	        return obj.name === name;
-	      });
-	      if (handlerIndex !== -1) {
-	        this.offAny(this._logHandlers[handlerIndex].handler);
-	        this._logHandlers.splice(handlerIndex, 1);
-	      }
-	    }
-
-	    return this;
-	  }
-
-	});
-
-	// extend() can't handle `toString` in IE8
-	Observable.prototype.toString = function () {
-	  return '[' + this._name + ']';
-	};
-
-	module.exports = Observable;
-
-/***/ },
-/* 2 */
-/***/ function(module, exports) {
-
-	"use strict";
-
-	function createObj(proto) {
-	  var F = function F() {};
-	  F.prototype = proto;
-	  return new F();
-	}
-
-	function extend(target /*, mixin1, mixin2...*/) {
-	  var length = arguments.length,
-	      i = undefined,
-	      prop = undefined;
-	  for (i = 1; i < length; i++) {
-	    for (prop in arguments[i]) {
-	      target[prop] = arguments[i][prop];
-	    }
-	  }
-	  return target;
-	}
-
-	function inherit(Child, Parent /*, mixin1, mixin2...*/) {
-	  var length = arguments.length,
-	      i = undefined;
-	  Child.prototype = createObj(Parent.prototype);
-	  Child.prototype.constructor = Child;
-	  for (i = 2; i < length; i++) {
-	    extend(Child.prototype, arguments[i]);
-	  }
-	  return Child;
-	}
-
-	module.exports = { extend: extend, inherit: inherit };
-
-/***/ },
-/* 3 */
-/***/ function(module, exports) {
-
-	'use strict';
-
-	exports.NOTHING = ['<nothing>'];
-	exports.END = 'end';
-	exports.VALUE = 'value';
-	exports.ERROR = 'error';
-	exports.ANY = 'any';
-
-/***/ },
-/* 4 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var extend = _require.extend;
-
-	var _require2 = __webpack_require__(3);
-
-	var VALUE = _require2.VALUE;
-	var ERROR = _require2.ERROR;
-	var ANY = _require2.ANY;
-
-	var _require3 = __webpack_require__(5);
-
-	var concat = _require3.concat;
-	var findByPred = _require3.findByPred;
-	var _remove = _require3.remove;
-	var contains = _require3.contains;
-
-	function callSubscriber(type, fn, event) {
-	  if (type === ANY) {
-	    fn(event);
-	  } else if (type === event.type) {
-	    if (type === VALUE || type === ERROR) {
-	      fn(event.value);
-	    } else {
-	      fn();
-	    }
-	  }
-	}
-
-	function Dispatcher() {
-	  this._items = [];
-	  this._inLoop = 0;
-	  this._removedItems = null;
-	}
-
-	extend(Dispatcher.prototype, {
-
-	  add: function add(type, fn) {
-	    this._items = concat(this._items, [{ type: type, fn: fn }]);
-	    return this._items.length;
-	  },
-
-	  remove: function remove(type, fn) {
-	    var index = findByPred(this._items, function (x) {
-	      return x.type === type && x.fn === fn;
-	    });
-
-	    // if we're currently in a notification loop,
-	    // remember this subscriber was removed
-	    if (this._inLoop !== 0 && index !== -1) {
-	      if (this._removedItems === null) {
-	        this._removedItems = [];
-	      }
-	      this._removedItems.push(this._items[index]);
-	    }
-
-	    this._items = _remove(this._items, index);
-	    return this._items.length;
-	  },
-
-	  dispatch: function dispatch(event) {
-	    this._inLoop++;
-	    for (var i = 0, items = this._items; i < items.length; i++) {
-
-	      // cleanup was called
-	      if (this._items === null) {
-	        break;
-	      }
-
-	      // this subscriber was removed
-	      if (this._removedItems !== null && contains(this._removedItems, items[i])) {
-	        continue;
-	      }
-
-	      callSubscriber(items[i].type, items[i].fn, event);
-	    }
-	    this._inLoop--;
-	    if (this._inLoop === 0) {
-	      this._removedItems = null;
-	    }
-	  },
-
-	  cleanup: function cleanup() {
-	    this._items = null;
-	  }
-
-	});
-
-	module.exports = { callSubscriber: callSubscriber, Dispatcher: Dispatcher };
-
-/***/ },
-/* 5 */
-/***/ function(module, exports) {
-
-	"use strict";
-
-	function concat(a, b) {
-	  var result = undefined,
-	      length = undefined,
-	      i = undefined,
-	      j = undefined;
-	  if (a.length === 0) {
-	    return b;
-	  }
-	  if (b.length === 0) {
-	    return a;
-	  }
-	  j = 0;
-	  result = new Array(a.length + b.length);
-	  length = a.length;
-	  for (i = 0; i < length; i++, j++) {
-	    result[j] = a[i];
-	  }
-	  length = b.length;
-	  for (i = 0; i < length; i++, j++) {
-	    result[j] = b[i];
-	  }
-	  return result;
-	}
-
-	function circleShift(arr, distance) {
-	  var length = arr.length,
-	      result = new Array(length),
-	      i = undefined;
-	  for (i = 0; i < length; i++) {
-	    result[(i + distance) % length] = arr[i];
-	  }
-	  return result;
-	}
-
-	function find(arr, value) {
-	  var length = arr.length,
-	      i = undefined;
-	  for (i = 0; i < length; i++) {
-	    if (arr[i] === value) {
-	      return i;
-	    }
-	  }
-	  return -1;
-	}
-
-	function findByPred(arr, pred) {
-	  var length = arr.length,
-	      i = undefined;
-	  for (i = 0; i < length; i++) {
-	    if (pred(arr[i])) {
-	      return i;
-	    }
-	  }
-	  return -1;
-	}
-
-	function cloneArray(input) {
-	  var length = input.length,
-	      result = new Array(length),
-	      i = undefined;
-	  for (i = 0; i < length; i++) {
-	    result[i] = input[i];
-	  }
-	  return result;
-	}
-
-	function remove(input, index) {
-	  var length = input.length,
-	      result = undefined,
-	      i = undefined,
-	      j = undefined;
-	  if (index >= 0 && index < length) {
-	    if (length === 1) {
-	      return [];
-	    } else {
-	      result = new Array(length - 1);
-	      for (i = 0, j = 0; i < length; i++) {
-	        if (i !== index) {
-	          result[j] = input[i];
-	          j++;
-	        }
-	      }
-	      return result;
-	    }
-	  } else {
-	    return input;
-	  }
-	}
-
-	function removeByPred(input, pred) {
-	  return remove(input, findByPred(input, pred));
-	}
-
-	function map(input, fn) {
-	  var length = input.length,
-	      result = new Array(length),
-	      i = undefined;
-	  for (i = 0; i < length; i++) {
-	    result[i] = fn(input[i]);
-	  }
-	  return result;
-	}
-
-	function forEach(arr, fn) {
-	  var length = arr.length,
-	      i = undefined;
-	  for (i = 0; i < length; i++) {
-	    fn(arr[i]);
-	  }
-	}
-
-	function fillArray(arr, value) {
-	  var length = arr.length,
-	      i = undefined;
-	  for (i = 0; i < length; i++) {
-	    arr[i] = value;
-	  }
-	}
-
-	function contains(arr, value) {
-	  return find(arr, value) !== -1;
-	}
-
-	function slide(cur, next, max) {
-	  var length = Math.min(max, cur.length + 1),
-	      offset = cur.length - length + 1,
-	      result = new Array(length),
-	      i = undefined;
-	  for (i = offset; i < length; i++) {
-	    result[i - offset] = cur[i];
-	  }
-	  result[length - 1] = next;
-	  return result;
-	}
-
-	module.exports = {
-	  concat: concat,
-	  circleShift: circleShift,
-	  find: find,
-	  findByPred: findByPred,
-	  cloneArray: cloneArray,
-	  remove: remove,
-	  removeByPred: removeByPred,
-	  map: map,
-	  forEach: forEach,
-	  fillArray: fillArray,
-	  contains: contains,
-	  slide: slide
-	};
-
-/***/ },
-/* 6 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var Observable = __webpack_require__(1);
-
-	function Stream() {
-	  Observable.call(this);
-	}
-
-	inherit(Stream, Observable, {
-
-	  _name: 'stream',
-
-	  getType: function getType() {
-	    return 'stream';
-	  }
-
-	});
-
-	module.exports = Stream;
-
-/***/ },
-/* 7 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var _require2 = __webpack_require__(3);
-
-	var VALUE = _require2.VALUE;
-	var ERROR = _require2.ERROR;
-	var END = _require2.END;
-
-	var _require3 = __webpack_require__(4);
-
-	var callSubscriber = _require3.callSubscriber;
-
-	var Observable = __webpack_require__(1);
-
-	function Property() {
-	  Observable.call(this);
-	  this._currentEvent = null;
-	}
-
-	inherit(Property, Observable, {
-
-	  _name: 'property',
-
-	  _emitValue: function _emitValue(value) {
-	    if (this._alive) {
-	      if (!this._activating) {
-	        this._dispatcher.dispatch({ type: VALUE, value: value, current: this._activating });
-	      }
-	      this._currentEvent = { type: VALUE, value: value, current: true };
-	    }
-	  },
-
-	  _emitError: function _emitError(value) {
-	    if (this._alive) {
-	      if (!this._activating) {
-	        this._dispatcher.dispatch({ type: ERROR, value: value, current: this._activating });
-	      }
-	      this._currentEvent = { type: ERROR, value: value, current: true };
-	    }
-	  },
-
-	  _emitEnd: function _emitEnd() {
-	    if (this._alive) {
-	      this._alive = false;
-	      if (!this._activating) {
-	        this._dispatcher.dispatch({ type: END, current: this._activating });
-	      }
-	      this._clear();
-	    }
-	  },
-
-	  _on: function _on(type, fn) {
-	    if (this._alive) {
-	      this._dispatcher.add(type, fn);
-	      this._setActive(true);
-	    }
-	    if (this._currentEvent !== null) {
-	      callSubscriber(type, fn, this._currentEvent);
-	    }
-	    if (!this._alive) {
-	      callSubscriber(type, fn, { type: END, current: true });
-	    }
-	    return this;
-	  },
-
-	  getType: function getType() {
-	    return 'property';
-	  }
-
-	});
-
-	module.exports = Property;
-
-/***/ },
-/* 8 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var Stream = __webpack_require__(6);
-
-	var neverS = new Stream();
-	neverS._emitEnd();
-	neverS._name = 'never';
-
-	module.exports = function never() {
-	  return neverS;
-	};
-
-/***/ },
-/* 9 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var timeBased = __webpack_require__(10);
-
-	var S = timeBased({
-
-	  _name: 'later',
-
-	  _init: function _init(_ref) {
-	    var x = _ref.x;
-
-	    this._x = x;
-	  },
-
-	  _free: function _free() {
-	    this._x = null;
-	  },
-
-	  _onTick: function _onTick() {
-	    this._emitValue(this._x);
-	    this._emitEnd();
-	  }
-
-	});
-
-	module.exports = function later(wait, x) {
-	  return new S(wait, { x: x });
-	};
-
-/***/ },
-/* 10 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var Stream = __webpack_require__(6);
-
-	module.exports = function timeBased(mixin) {
-
-	  function AnonymousStream(wait, options) {
-	    var _this = this;
-
-	    Stream.call(this);
-	    this._wait = wait;
-	    this._intervalId = null;
-	    this._$onTick = function () {
-	      return _this._onTick();
-	    };
-	    this._init(options);
-	  }
-
-	  inherit(AnonymousStream, Stream, {
-
-	    _init: function _init(options) {},
-	    _free: function _free() {},
-
-	    _onTick: function _onTick() {},
-
-	    _onActivation: function _onActivation() {
-	      this._intervalId = setInterval(this._$onTick, this._wait);
-	    },
-
-	    _onDeactivation: function _onDeactivation() {
-	      if (this._intervalId !== null) {
-	        clearInterval(this._intervalId);
-	        this._intervalId = null;
-	      }
-	    },
-
-	    _clear: function _clear() {
-	      Stream.prototype._clear.call(this);
-	      this._$onTick = null;
-	      this._free();
-	    }
-
-	  }, mixin);
-
-	  return AnonymousStream;
-	};
-
-/***/ },
-/* 11 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var timeBased = __webpack_require__(10);
-
-	var S = timeBased({
-
-	  _name: 'interval',
-
-	  _init: function _init(_ref) {
-	    var x = _ref.x;
-
-	    this._x = x;
-	  },
-
-	  _free: function _free() {
-	    this._x = null;
-	  },
-
-	  _onTick: function _onTick() {
-	    this._emitValue(this._x);
-	  }
-
-	});
-
-	module.exports = function interval(wait, x) {
-	  return new S(wait, { x: x });
-	};
-
-/***/ },
-/* 12 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var timeBased = __webpack_require__(10);
-
-	var _require = __webpack_require__(5);
-
-	var cloneArray = _require.cloneArray;
-
-	var never = __webpack_require__(8);
-
-	var S = timeBased({
-
-	  _name: 'sequentially',
-
-	  _init: function _init(_ref) {
-	    var xs = _ref.xs;
-
-	    this._xs = cloneArray(xs);
-	  },
-
-	  _free: function _free() {
-	    this._xs = null;
-	  },
-
-	  _onTick: function _onTick() {
-	    if (this._xs.length === 1) {
-	      this._emitValue(this._xs[0]);
-	      this._emitEnd();
-	    } else {
-	      this._emitValue(this._xs.shift());
-	    }
-	  }
-
-	});
-
-	module.exports = function sequentially(wait, xs) {
-	  return xs.length === 0 ? never() : new S(wait, { xs: xs });
-	};
-
-/***/ },
-/* 13 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var timeBased = __webpack_require__(10);
-
-	var S = timeBased({
-
-	  _name: 'fromPoll',
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _onTick: function _onTick() {
-	    var fn = this._fn;
-	    this._emitValue(fn());
-	  }
-
-	});
-
-	module.exports = function fromPoll(wait, fn) {
-	  return new S(wait, { fn: fn });
-	};
-
-/***/ },
-/* 14 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var timeBased = __webpack_require__(10);
-	var emitter = __webpack_require__(15);
-
-	var S = timeBased({
-
-	  _name: 'withInterval',
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	    this._emitter = emitter(this);
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	    this._emitter = null;
-	  },
-
-	  _onTick: function _onTick() {
-	    var fn = this._fn;
-	    fn(this._emitter);
-	  }
-
-	});
-
-	module.exports = function withInterval(wait, fn) {
-	  return new S(wait, { fn: fn });
-	};
-
-/***/ },
-/* 15 */
-/***/ function(module, exports) {
-
-	"use strict";
-
-	module.exports = function emitter(obs) {
-
-	  function value(x) {
-	    obs._emitValue(x);
-	    return obs._active;
-	  }
-
-	  function error(x) {
-	    obs._emitError(x);
-	    return obs._active;
-	  }
-
-	  function end() {
-	    obs._emitEnd();
-	    return obs._active;
-	  }
-
-	  function event(e) {
-	    obs._emit(e.type, e.value);
-	    return obs._active;
-	  }
-
-	  return { value: value, error: error, end: end, event: event, emit: value, emitEvent: event };
-	};
-
-/***/ },
-/* 16 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var stream = __webpack_require__(17);
-
-	module.exports = function fromCallback(callbackConsumer) {
-
-	  var called = false;
-
-	  return stream(function (emitter) {
-
-	    if (!called) {
-	      callbackConsumer(function (x) {
-	        emitter.emit(x);
-	        emitter.end();
-	      });
-	      called = true;
-	    }
-	  }).setName('fromCallback');
-	};
-
-/***/ },
-/* 17 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var Stream = __webpack_require__(6);
-	var emitter = __webpack_require__(15);
-
-	function S(fn) {
-	  Stream.call(this);
-	  this._fn = fn;
-	  this._unsubscribe = null;
-	}
-
-	inherit(S, Stream, {
-
-	  _name: 'stream',
-
-	  _onActivation: function _onActivation() {
-	    var fn = this._fn;
-	    var unsubscribe = fn(emitter(this));
-	    this._unsubscribe = typeof unsubscribe === 'function' ? unsubscribe : null;
-
-	    // fix https://github.com/rpominov/kefir/issues/35
-	    if (!this._active) {
-	      this._callUnsubscribe();
-	    }
-	  },
-
-	  _callUnsubscribe: function _callUnsubscribe() {
-	    if (this._unsubscribe !== null) {
-	      this._unsubscribe();
-	      this._unsubscribe = null;
-	    }
-	  },
-
-	  _onDeactivation: function _onDeactivation() {
-	    this._callUnsubscribe();
-	  },
-
-	  _clear: function _clear() {
-	    Stream.prototype._clear.call(this);
-	    this._fn = null;
-	  }
-
-	});
-
-	module.exports = function stream(fn) {
-	  return new S(fn);
-	};
-
-/***/ },
-/* 18 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var stream = __webpack_require__(17);
-
-	module.exports = function fromNodeCallback(callbackConsumer) {
-
-	  var called = false;
-
-	  return stream(function (emitter) {
-
-	    if (!called) {
-	      callbackConsumer(function (error, x) {
-	        if (error) {
-	          emitter.error(error);
-	        } else {
-	          emitter.emit(x);
-	        }
-	        emitter.end();
-	      });
-	      called = true;
-	    }
-	  }).setName('fromNodeCallback');
-	};
-
-/***/ },
-/* 19 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var fromSubUnsub = __webpack_require__(20);
-
-	var pairs = [['addEventListener', 'removeEventListener'], ['addListener', 'removeListener'], ['on', 'off']];
-
-	module.exports = function fromEvents(target, eventName, transformer) {
-	  var sub = undefined,
-	      unsub = undefined;
-
-	  for (var i = 0; i < pairs.length; i++) {
-	    if (typeof target[pairs[i][0]] === 'function' && typeof target[pairs[i][1]] === 'function') {
-	      sub = pairs[i][0];
-	      unsub = pairs[i][1];
-	      break;
-	    }
-	  }
-
-	  if (sub === undefined) {
-	    throw new Error('target don\'t support any of ' + 'addEventListener/removeEventListener, addListener/removeListener, on/off method pair');
-	  }
-
-	  return fromSubUnsub(function (handler) {
-	    return target[sub](eventName, handler);
-	  }, function (handler) {
-	    return target[unsub](eventName, handler);
-	  }, transformer).setName('fromEvents');
-	};
-
-/***/ },
-/* 20 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var stream = __webpack_require__(17);
-
-	var _require = __webpack_require__(21);
-
-	var apply = _require.apply;
-
-	module.exports = function fromSubUnsub(sub, unsub, transformer /* Function | falsey */) {
-	  return stream(function (emitter) {
-
-	    var handler = transformer ? function () {
-	      emitter.emit(apply(transformer, this, arguments));
-	    } : emitter.emit;
-
-	    sub(handler);
-	    return function () {
-	      return unsub(handler);
-	    };
-	  }).setName('fromSubUnsub');
-	};
-
-/***/ },
-/* 21 */
-/***/ function(module, exports) {
-
-	"use strict";
-
-	function spread(fn, length) {
-	  switch (length) {
-	    case 0:
-	      return function (a) {
-	        return fn();
-	      };
-	    case 1:
-	      return function (a) {
-	        return fn(a[0]);
-	      };
-	    case 2:
-	      return function (a) {
-	        return fn(a[0], a[1]);
-	      };
-	    case 3:
-	      return function (a) {
-	        return fn(a[0], a[1], a[2]);
-	      };
-	    case 4:
-	      return function (a) {
-	        return fn(a[0], a[1], a[2], a[3]);
-	      };
-	    default:
-	      return function (a) {
-	        return fn.apply(null, a);
-	      };
-	  }
-	}
-
-	function apply(fn, c, a) {
-	  var aLength = a ? a.length : 0;
-	  if (c == null) {
-	    switch (aLength) {
-	      case 0:
-	        return fn();
-	      case 1:
-	        return fn(a[0]);
-	      case 2:
-	        return fn(a[0], a[1]);
-	      case 3:
-	        return fn(a[0], a[1], a[2]);
-	      case 4:
-	        return fn(a[0], a[1], a[2], a[3]);
-	      default:
-	        return fn.apply(null, a);
-	    }
-	  } else {
-	    switch (aLength) {
-	      case 0:
-	        return fn.call(c);
-	      default:
-	        return fn.apply(c, a);
-	    }
-	  }
-	}
-
-	module.exports = { spread: spread, apply: apply };
-
-/***/ },
-/* 22 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var Property = __webpack_require__(7);
-
-	// HACK:
-	//   We don't call parent Class constructor, but instead putting all necessary
-	//   properties into prototype to simulate ended Property
-	//   (see Propperty and Observable classes).
-
-	function P(value) {
-	  this._currentEvent = { type: 'value', value: value, current: true };
-	}
-
-	inherit(P, Property, {
-	  _name: 'constant',
-	  _active: false,
-	  _activating: false,
-	  _alive: false,
-	  _dispatcher: null,
-	  _logHandlers: null
-	});
-
-	module.exports = function constant(x) {
-	  return new P(x);
-	};
-
-/***/ },
-/* 23 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var Property = __webpack_require__(7);
-
-	// HACK:
-	//   We don't call parent Class constructor, but instead putting all necessary
-	//   properties into prototype to simulate ended Property
-	//   (see Propperty and Observable classes).
-
-	function P(value) {
-	  this._currentEvent = { type: 'error', value: value, current: true };
-	}
-
-	inherit(P, Property, {
-	  _name: 'constantError',
-	  _active: false,
-	  _activating: false,
-	  _alive: false,
-	  _dispatcher: null,
-	  _logHandlers: null
-	});
-
-	module.exports = function constantError(x) {
-	  return new P(x);
-	};
-
-/***/ },
-/* 24 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var stream = __webpack_require__(17);
-	var toProperty = __webpack_require__(25);
-
-	module.exports = function fromPromise(promise) {
-
-	  var called = false;
-
-	  var result = stream(function (emitter) {
-	    if (!called) {
-	      var onValue = function onValue(x) {
-	        emitter.emit(x);
-	        emitter.end();
-	      };
-	      var onError = function onError(x) {
-	        emitter.error(x);
-	        emitter.end();
-	      };
-	      var _promise = promise.then(onValue, onError);
-
-	      // prevent libraries like 'Q' or 'when' from swallowing exceptions
-	      if (_promise && typeof _promise.done === 'function') {
-	        _promise.done();
-	      }
-
-	      called = true;
-	    }
-	  });
-
-	  return toProperty(result, null).setName('fromPromise');
-	};
-
-/***/ },
-/* 25 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createProperty = _require.createProperty;
-
-	var P = createProperty('toProperty', {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._getInitialCurrent = fn;
-	  },
-
-	  _onActivation: function _onActivation() {
-	    if (this._getInitialCurrent !== null) {
-	      var getInitial = this._getInitialCurrent;
-	      this._emitValue(getInitial());
-	    }
-	    this._source.onAny(this._$handleAny); // copied from patterns/one-source
-	  }
-
-	});
-
-	module.exports = function toProperty(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? null : arguments[1];
-
-	  if (fn !== null && typeof fn !== 'function') {
-	    throw new Error('You should call toProperty() with a function or no arguments.');
-	  }
-	  return new P(obs, { fn: fn });
-	};
-
-/***/ },
-/* 26 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var Stream = __webpack_require__(6);
-	var Property = __webpack_require__(7);
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var _require2 = __webpack_require__(3);
-
-	var VALUE = _require2.VALUE;
-	var ERROR = _require2.ERROR;
-	var END = _require2.END;
-
-	function createConstructor(BaseClass, name) {
-	  return function AnonymousObservable(source, options) {
-	    var _this = this;
-
-	    BaseClass.call(this);
-	    this._source = source;
-	    this._name = source._name + '.' + name;
-	    this._init(options);
-	    this._$handleAny = function (event) {
-	      return _this._handleAny(event);
-	    };
-	  };
-	}
-
-	function createClassMethods(BaseClass) {
-	  return {
-
-	    _init: function _init(options) {},
-	    _free: function _free() {},
-
-	    _handleValue: function _handleValue(x) {
-	      this._emitValue(x);
-	    },
-	    _handleError: function _handleError(x) {
-	      this._emitError(x);
-	    },
-	    _handleEnd: function _handleEnd() {
-	      this._emitEnd();
-	    },
-
-	    _handleAny: function _handleAny(event) {
-	      switch (event.type) {
-	        case VALUE:
-	          return this._handleValue(event.value);
-	        case ERROR:
-	          return this._handleError(event.value);
-	        case END:
-	          return this._handleEnd();
-	      }
-	    },
-
-	    _onActivation: function _onActivation() {
-	      this._source.onAny(this._$handleAny);
-	    },
-	    _onDeactivation: function _onDeactivation() {
-	      this._source.offAny(this._$handleAny);
-	    },
-
-	    _clear: function _clear() {
-	      BaseClass.prototype._clear.call(this);
-	      this._source = null;
-	      this._$handleAny = null;
-	      this._free();
-	    }
-
-	  };
-	}
-
-	function createStream(name, mixin) {
-	  var S = createConstructor(Stream, name);
-	  inherit(S, Stream, createClassMethods(Stream), mixin);
-	  return S;
-	}
-
-	function createProperty(name, mixin) {
-	  var P = createConstructor(Property, name);
-	  inherit(P, Property, createClassMethods(Property), mixin);
-	  return P;
-	}
-
-	module.exports = { createStream: createStream, createProperty: createProperty };
-
-/***/ },
-/* 27 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-
-	var S = createStream('changes', {
-
-	  _handleValue: function _handleValue(x) {
-	    if (!this._activating) {
-	      this._emitValue(x);
-	    }
-	  },
-
-	  _handleError: function _handleError(x) {
-	    if (!this._activating) {
-	      this._emitError(x);
-	    }
-	  }
-
-	});
-
-	module.exports = function changes(obs) {
-	  return new S(obs);
-	};
-
-/***/ },
-/* 28 */
-/***/ function(module, exports) {
-
-	'use strict';
-
-	function getGlodalPromise() {
-	  if (typeof Promise === 'function') {
-	    return Promise;
-	  } else {
-	    throw new Error('There isn\'t default Promise, use shim or parameter');
-	  }
-	}
-
-	module.exports = function (obs) {
-	  var Promise = arguments.length <= 1 || arguments[1] === undefined ? getGlodalPromise() : arguments[1];
-
-	  var last = null;
-	  return new Promise(function (resolve, reject) {
-	    obs.onAny(function (event) {
-	      if (event.type === 'end' && last !== null) {
-	        (last.type === 'value' ? resolve : reject)(last.value);
-	        last = null;
-	      } else {
-	        last = event;
-	      }
-	    });
-	  });
-	};
-
-/***/ },
-/* 29 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    var fn = this._fn;
-	    this._emitValue(fn(x));
-	  }
-
-	};
-
-	var S = createStream('map', mixin);
-	var P = createProperty('map', mixin);
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	module.exports = function map(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? id : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 30 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    var fn = this._fn;
-	    if (fn(x)) {
-	      this._emitValue(x);
-	    }
-	  }
-
-	};
-
-	var S = createStream('filter', mixin);
-	var P = createProperty('filter', mixin);
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	module.exports = function filter(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? id : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 31 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var n = _ref.n;
-
-	    this._n = n;
-	    if (n <= 0) {
-	      this._emitEnd();
-	    }
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    this._n--;
-	    this._emitValue(x);
-	    if (this._n === 0) {
-	      this._emitEnd();
-	    }
-	  }
-
-	};
-
-	var S = createStream('take', mixin);
-	var P = createProperty('take', mixin);
-
-	module.exports = function takeWhile(obs, n) {
-	  return new (obs._ofSameType(S, P))(obs, { n: n });
-	};
-
-/***/ },
-/* 32 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    var fn = this._fn;
-	    if (fn(x)) {
-	      this._emitValue(x);
-	    } else {
-	      this._emitEnd();
-	    }
-	  }
-
-	};
-
-	var S = createStream('takeWhile', mixin);
-	var P = createProperty('takeWhile', mixin);
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	module.exports = function takeWhile(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? id : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 33 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var NOTHING = _require2.NOTHING;
-
-	var mixin = {
-
-	  _init: function _init() {
-	    this._lastValue = NOTHING;
-	  },
-
-	  _free: function _free() {
-	    this._lastValue = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    this._lastValue = x;
-	  },
-
-	  _handleEnd: function _handleEnd() {
-	    if (this._lastValue !== NOTHING) {
-	      this._emitValue(this._lastValue);
-	    }
-	    this._emitEnd();
-	  }
-
-	};
-
-	var S = createStream('last', mixin);
-	var P = createProperty('last', mixin);
-
-	module.exports = function last(obs) {
-	  return new (obs._ofSameType(S, P))(obs);
-	};
-
-/***/ },
-/* 34 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var n = _ref.n;
-
-	    this._n = Math.max(0, n);
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    if (this._n === 0) {
-	      this._emitValue(x);
-	    } else {
-	      this._n--;
-	    }
-	  }
-
-	};
-
-	var S = createStream('skip', mixin);
-	var P = createProperty('skip', mixin);
-
-	module.exports = function skip(obs, n) {
-	  return new (obs._ofSameType(S, P))(obs, { n: n });
-	};
-
-/***/ },
-/* 35 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    var fn = this._fn;
-	    if (this._fn !== null && !fn(x)) {
-	      this._fn = null;
-	    }
-	    if (this._fn === null) {
-	      this._emitValue(x);
-	    }
-	  }
-
-	};
-
-	var S = createStream('skipWhile', mixin);
-	var P = createProperty('skipWhile', mixin);
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	module.exports = function skipWhile(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? id : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 36 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var NOTHING = _require2.NOTHING;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	    this._prev = NOTHING;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	    this._prev = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    var fn = this._fn;
-	    if (this._prev === NOTHING || !fn(this._prev, x)) {
-	      this._prev = x;
-	      this._emitValue(x);
-	    }
-	  }
-
-	};
-
-	var S = createStream('skipDuplicates', mixin);
-	var P = createProperty('skipDuplicates', mixin);
-
-	var eq = function eq(a, b) {
-	  return a === b;
-	};
-
-	module.exports = function skipDuplicates(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? eq : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 37 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var NOTHING = _require2.NOTHING;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-	    var seed = _ref.seed;
-
-	    this._fn = fn;
-	    this._prev = seed;
-	  },
-
-	  _free: function _free() {
-	    this._prev = null;
-	    this._fn = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    if (this._prev !== NOTHING) {
-	      var fn = this._fn;
-	      this._emitValue(fn(this._prev, x));
-	    }
-	    this._prev = x;
-	  }
-
-	};
-
-	var S = createStream('diff', mixin);
-	var P = createProperty('diff', mixin);
-
-	function defaultFn(a, b) {
-	  return [a, b];
-	}
-
-	module.exports = function diff(obs, fn) {
-	  var seed = arguments.length <= 2 || arguments[2] === undefined ? NOTHING : arguments[2];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn || defaultFn, seed: seed });
-	};
-
-/***/ },
-/* 38 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var ERROR = _require2.ERROR;
-	var NOTHING = _require2.NOTHING;
-
-	var P = createProperty('scan', {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-	    var seed = _ref.seed;
-
-	    this._fn = fn;
-	    if (seed !== NOTHING) {
-	      this._emitValue(seed);
-	    }
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    if (this._currentEvent !== null && this._currentEvent.type !== ERROR) {
-	      var fn = this._fn;
-	      x = fn(this._currentEvent.value, x);
-	    }
-	    this._emitValue(x);
-	  }
-
-	});
-
-	module.exports = function scan(obs, fn) {
-	  var seed = arguments.length <= 2 || arguments[2] === undefined ? NOTHING : arguments[2];
-
-	  return new P(obs, { fn: fn, seed: seed });
-	};
-
-/***/ },
-/* 39 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    var fn = this._fn;
-	    var xs = fn(x);
-	    for (var i = 0; i < xs.length; i++) {
-	      this._emitValue(xs[i]);
-	    }
-	  }
-
-	};
-
-	var S = createStream('flatten', mixin);
-	var P = createProperty('flatten', mixin);
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	module.exports = function flatten(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? id : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 40 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var END_MARKER = {};
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var _this = this;
-
-	    var wait = _ref.wait;
-
-	    this._wait = Math.max(0, wait);
-	    this._buff = [];
-	    this._$shiftBuff = function () {
-	      var value = _this._buff.shift();
-	      if (value === END_MARKER) {
-	        _this._emitEnd();
-	      } else {
-	        _this._emitValue(value);
-	      }
-	    };
-	  },
-
-	  _free: function _free() {
-	    this._buff = null;
-	    this._$shiftBuff = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    if (this._activating) {
-	      this._emitValue(x);
-	    } else {
-	      this._buff.push(x);
-	      setTimeout(this._$shiftBuff, this._wait);
-	    }
-	  },
-
-	  _handleEnd: function _handleEnd() {
-	    if (this._activating) {
-	      this._emitEnd();
-	    } else {
-	      this._buff.push(END_MARKER);
-	      setTimeout(this._$shiftBuff, this._wait);
-	    }
-	  }
-
-	};
-
-	var S = createStream('delay', mixin);
-	var P = createProperty('delay', mixin);
-
-	module.exports = function delay(obs, wait) {
-	  return new (obs._ofSameType(S, P))(obs, { wait: wait });
-	};
-
-/***/ },
-/* 41 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var now = __webpack_require__(42);
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var _this = this;
-
-	    var wait = _ref.wait;
-	    var leading = _ref.leading;
-	    var trailing = _ref.trailing;
-
-	    this._wait = Math.max(0, wait);
-	    this._leading = leading;
-	    this._trailing = trailing;
-	    this._trailingValue = null;
-	    this._timeoutId = null;
-	    this._endLater = false;
-	    this._lastCallTime = 0;
-	    this._$trailingCall = function () {
-	      return _this._trailingCall();
-	    };
-	  },
-
-	  _free: function _free() {
-	    this._trailingValue = null;
-	    this._$trailingCall = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    if (this._activating) {
-	      this._emitValue(x);
-	    } else {
-	      var curTime = now();
-	      if (this._lastCallTime === 0 && !this._leading) {
-	        this._lastCallTime = curTime;
-	      }
-	      var remaining = this._wait - (curTime - this._lastCallTime);
-	      if (remaining <= 0) {
-	        this._cancelTrailing();
-	        this._lastCallTime = curTime;
-	        this._emitValue(x);
-	      } else if (this._trailing) {
-	        this._cancelTrailing();
-	        this._trailingValue = x;
-	        this._timeoutId = setTimeout(this._$trailingCall, remaining);
-	      }
-	    }
-	  },
-
-	  _handleEnd: function _handleEnd() {
-	    if (this._activating) {
-	      this._emitEnd();
-	    } else {
-	      if (this._timeoutId) {
-	        this._endLater = true;
-	      } else {
-	        this._emitEnd();
-	      }
-	    }
-	  },
-
-	  _cancelTrailing: function _cancelTrailing() {
-	    if (this._timeoutId !== null) {
-	      clearTimeout(this._timeoutId);
-	      this._timeoutId = null;
-	    }
-	  },
-
-	  _trailingCall: function _trailingCall() {
-	    this._emitValue(this._trailingValue);
-	    this._timeoutId = null;
-	    this._trailingValue = null;
-	    this._lastCallTime = !this._leading ? 0 : now();
-	    if (this._endLater) {
-	      this._emitEnd();
-	    }
-	  }
-
-	};
-
-	var S = createStream('throttle', mixin);
-	var P = createProperty('throttle', mixin);
-
-	module.exports = function throttle(obs, wait) {
-	  var _ref2 = arguments.length <= 2 || arguments[2] === undefined ? {} : arguments[2];
-
-	  var _ref2$leading = _ref2.leading;
-	  var leading = _ref2$leading === undefined ? true : _ref2$leading;
-	  var _ref2$trailing = _ref2.trailing;
-	  var trailing = _ref2$trailing === undefined ? true : _ref2$trailing;
-
-	  return new (obs._ofSameType(S, P))(obs, { wait: wait, leading: leading, trailing: trailing });
-	};
-
-/***/ },
-/* 42 */
-/***/ function(module, exports) {
-
-	"use strict";
-
-	module.exports = Date.now ? function () {
-	  return Date.now();
-	} : function () {
-	  return new Date().getTime();
-	};
-
-/***/ },
-/* 43 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var now = __webpack_require__(42);
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var _this = this;
-
-	    var wait = _ref.wait;
-	    var immediate = _ref.immediate;
-
-	    this._wait = Math.max(0, wait);
-	    this._immediate = immediate;
-	    this._lastAttempt = 0;
-	    this._timeoutId = null;
-	    this._laterValue = null;
-	    this._endLater = false;
-	    this._$later = function () {
-	      return _this._later();
-	    };
-	  },
-
-	  _free: function _free() {
-	    this._laterValue = null;
-	    this._$later = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    if (this._activating) {
-	      this._emitValue(x);
-	    } else {
-	      this._lastAttempt = now();
-	      if (this._immediate && !this._timeoutId) {
-	        this._emitValue(x);
-	      }
-	      if (!this._timeoutId) {
-	        this._timeoutId = setTimeout(this._$later, this._wait);
-	      }
-	      if (!this._immediate) {
-	        this._laterValue = x;
-	      }
-	    }
-	  },
-
-	  _handleEnd: function _handleEnd() {
-	    if (this._activating) {
-	      this._emitEnd();
-	    } else {
-	      if (this._timeoutId && !this._immediate) {
-	        this._endLater = true;
-	      } else {
-	        this._emitEnd();
-	      }
-	    }
-	  },
-
-	  _later: function _later() {
-	    var last = now() - this._lastAttempt;
-	    if (last < this._wait && last >= 0) {
-	      this._timeoutId = setTimeout(this._$later, this._wait - last);
-	    } else {
-	      this._timeoutId = null;
-	      if (!this._immediate) {
-	        this._emitValue(this._laterValue);
-	        this._laterValue = null;
-	      }
-	      if (this._endLater) {
-	        this._emitEnd();
-	      }
-	    }
-	  }
-
-	};
-
-	var S = createStream('debounce', mixin);
-	var P = createProperty('debounce', mixin);
-
-	module.exports = function debounce(obs, wait) {
-	  var _ref2 = arguments.length <= 2 || arguments[2] === undefined ? {} : arguments[2];
-
-	  var _ref2$immediate = _ref2.immediate;
-	  var immediate = _ref2$immediate === undefined ? false : _ref2$immediate;
-
-	  return new (obs._ofSameType(S, P))(obs, { wait: wait, immediate: immediate });
-	};
-
-/***/ },
-/* 44 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    var fn = this._fn;
-	    var result = fn(x);
-	    if (result.convert) {
-	      this._emitError(result.error);
-	    } else {
-	      this._emitValue(x);
-	    }
-	  }
-
-	};
-
-	var S = createStream('valuesToErrors', mixin);
-	var P = createProperty('valuesToErrors', mixin);
-
-	var defFn = function defFn(x) {
-	  return { convert: true, error: x };
-	};
-
-	module.exports = function valuesToErrors(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? defFn : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 45 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleError: function _handleError(x) {
-	    var fn = this._fn;
-	    var result = fn(x);
-	    if (result.convert) {
-	      this._emitValue(result.value);
-	    } else {
-	      this._emitError(x);
-	    }
-	  }
-
-	};
-
-	var S = createStream('errorsToValues', mixin);
-	var P = createProperty('errorsToValues', mixin);
-
-	var defFn = function defFn(x) {
-	  return { convert: true, value: x };
-	};
-
-	module.exports = function errorsToValues(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? defFn : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 46 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleError: function _handleError(x) {
-	    var fn = this._fn;
-	    this._emitError(fn(x));
-	  }
-
-	};
-
-	var S = createStream('mapErrors', mixin);
-	var P = createProperty('mapErrors', mixin);
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	module.exports = function mapErrors(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? id : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 47 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleError: function _handleError(x) {
-	    var fn = this._fn;
-	    if (fn(x)) {
-	      this._emitError(x);
-	    }
-	  }
-
-	};
-
-	var S = createStream('filterErrors', mixin);
-	var P = createProperty('filterErrors', mixin);
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	module.exports = function filterErrors(obs) {
-	  var fn = arguments.length <= 1 || arguments[1] === undefined ? id : arguments[1];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 48 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _handleError: function _handleError(x) {
-	    this._emitError(x);
-	    this._emitEnd();
-	  }
-
-	};
-
-	var S = createStream('endOnError', mixin);
-	var P = createProperty('endOnError', mixin);
-
-	module.exports = function endOnError(obs) {
-	  return new (obs._ofSameType(S, P))(obs);
-	};
-
-/***/ },
-/* 49 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-	  _handleValue: function _handleValue() {}
-	};
-
-	var S = createStream('skipValues', mixin);
-	var P = createProperty('skipValues', mixin);
-
-	module.exports = function skipValues(obs) {
-	  return new (obs._ofSameType(S, P))(obs);
-	};
-
-/***/ },
-/* 50 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-	  _handleError: function _handleError() {}
-	};
-
-	var S = createStream('skipErrors', mixin);
-	var P = createProperty('skipErrors', mixin);
-
-	module.exports = function skipErrors(obs) {
-	  return new (obs._ofSameType(S, P))(obs);
-	};
-
-/***/ },
-/* 51 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-	  _handleEnd: function _handleEnd() {}
-	};
-
-	var S = createStream('skipEnd', mixin);
-	var P = createProperty('skipEnd', mixin);
-
-	module.exports = function skipEnd(obs) {
-	  return new (obs._ofSameType(S, P))(obs);
-	};
-
-/***/ },
-/* 52 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._fn = fn;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	  },
-
-	  _handleEnd: function _handleEnd() {
-	    var fn = this._fn;
-	    this._emitValue(fn());
-	    this._emitEnd();
-	  }
-
-	};
-
-	var S = createStream('beforeEnd', mixin);
-	var P = createProperty('beforeEnd', mixin);
-
-	module.exports = function beforeEnd(obs, fn) {
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 53 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(5);
-
-	var slide = _require2.slide;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var min = _ref.min;
-	    var max = _ref.max;
-
-	    this._max = max;
-	    this._min = min;
-	    this._buff = [];
-	  },
-
-	  _free: function _free() {
-	    this._buff = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    this._buff = slide(this._buff, x, this._max);
-	    if (this._buff.length >= this._min) {
-	      this._emitValue(this._buff);
-	    }
-	  }
-
-	};
-
-	var S = createStream('slidingWindow', mixin);
-	var P = createProperty('slidingWindow', mixin);
-
-	module.exports = function slidingWindow(obs, max) {
-	  var min = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
-
-	  return new (obs._ofSameType(S, P))(obs, { min: min, max: max });
-	};
-
-/***/ },
-/* 54 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-	    var flushOnEnd = _ref.flushOnEnd;
-
-	    this._fn = fn;
-	    this._flushOnEnd = flushOnEnd;
-	    this._buff = [];
-	  },
-
-	  _free: function _free() {
-	    this._buff = null;
-	  },
-
-	  _flush: function _flush() {
-	    if (this._buff !== null && this._buff.length !== 0) {
-	      this._emitValue(this._buff);
-	      this._buff = [];
-	    }
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    this._buff.push(x);
-	    var fn = this._fn;
-	    if (!fn(x)) {
-	      this._flush();
-	    }
-	  },
-
-	  _handleEnd: function _handleEnd() {
-	    if (this._flushOnEnd) {
-	      this._flush();
-	    }
-	    this._emitEnd();
-	  }
-
-	};
-
-	var S = createStream('bufferWhile', mixin);
-	var P = createProperty('bufferWhile', mixin);
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	module.exports = function bufferWhile(obs, fn) {
-	  var _ref2 = arguments.length <= 2 || arguments[2] === undefined ? {} : arguments[2];
-
-	  var _ref2$flushOnEnd = _ref2.flushOnEnd;
-	  var flushOnEnd = _ref2$flushOnEnd === undefined ? true : _ref2$flushOnEnd;
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn || id, flushOnEnd: flushOnEnd });
-	};
-
-/***/ },
-/* 55 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	function xformForObs(obs) {
-	  return {
-
-	    '@@transducer/step': function transducerStep(res, input) {
-	      obs._emitValue(input);
-	      return null;
-	    },
-
-	    '@@transducer/result': function transducerResult(res) {
-	      obs._emitEnd();
-	      return null;
-	    }
-
-	  };
-	}
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var transducer = _ref.transducer;
-
-	    this._xform = transducer(xformForObs(this));
-	  },
-
-	  _free: function _free() {
-	    this._xform = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    if (this._xform['@@transducer/step'](null, x) !== null) {
-	      this._xform['@@transducer/result'](null);
-	    }
-	  },
-
-	  _handleEnd: function _handleEnd() {
-	    this._xform['@@transducer/result'](null);
-	  }
-
-	};
-
-	var S = createStream('transduce', mixin);
-	var P = createProperty('transduce', mixin);
-
-	module.exports = function transduce(obs, transducer) {
-	  return new (obs._ofSameType(S, P))(obs, { transducer: transducer });
-	};
-
-/***/ },
-/* 56 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var emitter = __webpack_require__(15);
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-
-	    this._handler = fn;
-	    this._emitter = emitter(this);
-	  },
-
-	  _free: function _free() {
-	    this._handler = null;
-	    this._emitter = null;
-	  },
-
-	  _handleAny: function _handleAny(event) {
-	    this._handler(this._emitter, event);
-	  }
-
-	};
-
-	var S = createStream('withHandler', mixin);
-	var P = createProperty('withHandler', mixin);
-
-	module.exports = function withHandler(obs, fn) {
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn });
-	};
-
-/***/ },
-/* 57 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var Stream = __webpack_require__(6);
-
-	var _require = __webpack_require__(3);
-
-	var VALUE = _require.VALUE;
-	var ERROR = _require.ERROR;
-	var NOTHING = _require.NOTHING;
-
-	var _require2 = __webpack_require__(2);
-
-	var inherit = _require2.inherit;
-
-	var _require3 = __webpack_require__(5);
-
-	var concat = _require3.concat;
-	var fillArray = _require3.fillArray;
-
-	var _require4 = __webpack_require__(21);
-
-	var spread = _require4.spread;
-
-	var never = __webpack_require__(8);
-
-	function defaultErrorsCombinator(errors) {
-	  var latestError = undefined;
-	  for (var i = 0; i < errors.length; i++) {
-	    if (errors[i] !== undefined) {
-	      if (latestError === undefined || latestError.index < errors[i].index) {
-	        latestError = errors[i];
-	      }
-	    }
-	  }
-	  return latestError.error;
-	}
-
-	function Combine(active, passive, combinator) {
-	  var _this = this;
-
-	  Stream.call(this);
-	  this._activeCount = active.length;
-	  this._sources = concat(active, passive);
-	  this._combinator = combinator ? spread(combinator, this._sources.length) : function (x) {
-	    return x;
-	  };
-	  this._aliveCount = 0;
-	  this._latestValues = new Array(this._sources.length);
-	  this._latestErrors = new Array(this._sources.length);
-	  fillArray(this._latestValues, NOTHING);
-	  this._emitAfterActivation = false;
-	  this._endAfterActivation = false;
-	  this._latestErrorIndex = 0;
-
-	  this._$handlers = [];
-
-	  var _loop = function (i) {
-	    _this._$handlers.push(function (event) {
-	      return _this._handleAny(i, event);
-	    });
-	  };
-
-	  for (var i = 0; i < this._sources.length; i++) {
-	    _loop(i);
-	  }
-	}
-
-	inherit(Combine, Stream, {
-
-	  _name: 'combine',
-
-	  _onActivation: function _onActivation() {
-	    this._aliveCount = this._activeCount;
-
-	    // we need to suscribe to _passive_ sources before _active_
-	    // (see https://github.com/rpominov/kefir/issues/98)
-	    for (var i = this._activeCount; i < this._sources.length; i++) {
-	      this._sources[i].onAny(this._$handlers[i]);
-	    }
-	    for (var i = 0; i < this._activeCount; i++) {
-	      this._sources[i].onAny(this._$handlers[i]);
-	    }
-
-	    if (this._emitAfterActivation) {
-	      this._emitAfterActivation = false;
-	      this._emitIfFull();
-	    }
-	    if (this._endAfterActivation) {
-	      this._emitEnd();
-	    }
-	  },
-
-	  _onDeactivation: function _onDeactivation() {
-	    var length = this._sources.length,
-	        i = undefined;
-	    for (i = 0; i < length; i++) {
-	      this._sources[i].offAny(this._$handlers[i]);
-	    }
-	  },
-
-	  _emitIfFull: function _emitIfFull() {
-	    var hasAllValues = true;
-	    var hasErrors = false;
-	    var length = this._latestValues.length;
-	    var valuesCopy = new Array(length);
-	    var errorsCopy = new Array(length);;
-
-	    for (var i = 0; i < length; i++) {
-	      valuesCopy[i] = this._latestValues[i];
-	      errorsCopy[i] = this._latestErrors[i];
-
-	      if (valuesCopy[i] === NOTHING) {
-	        hasAllValues = false;
-	      }
-
-	      if (errorsCopy[i] !== undefined) {
-	        hasErrors = true;
-	      }
-	    }
-
-	    if (hasAllValues) {
-	      var combinator = this._combinator;
-	      this._emitValue(combinator(valuesCopy));
-	    }
-	    if (hasErrors) {
-	      this._emitError(defaultErrorsCombinator(errorsCopy));
-	    }
-	  },
-
-	  _handleAny: function _handleAny(i, event) {
-
-	    if (event.type === VALUE || event.type === ERROR) {
-
-	      if (event.type === VALUE) {
-	        this._latestValues[i] = event.value;
-	        this._latestErrors[i] = undefined;
-	      }
-	      if (event.type === ERROR) {
-	        this._latestValues[i] = NOTHING;
-	        this._latestErrors[i] = {
-	          index: this._latestErrorIndex++,
-	          error: event.value
-	        };
-	      }
-
-	      if (i < this._activeCount) {
-	        if (this._activating) {
-	          this._emitAfterActivation = true;
-	        } else {
-	          this._emitIfFull();
-	        }
-	      }
-	    } else {
-	      // END
-
-	      if (i < this._activeCount) {
-	        this._aliveCount--;
-	        if (this._aliveCount === 0) {
-	          if (this._activating) {
-	            this._endAfterActivation = true;
-	          } else {
-	            this._emitEnd();
-	          }
-	        }
-	      }
-	    }
-	  },
-
-	  _clear: function _clear() {
-	    Stream.prototype._clear.call(this);
-	    this._sources = null;
-	    this._latestValues = null;
-	    this._latestErrors = null;
-	    this._combinator = null;
-	    this._$handlers = null;
-	  }
-
-	});
-
-	module.exports = function combine(active, passive, combinator) {
-	  if (passive === undefined) passive = [];
-
-	  if (typeof passive === 'function') {
-	    combinator = passive;
-	    passive = [];
-	  }
-	  return active.length === 0 ? never() : new Combine(active, passive, combinator);
-	};
-
-/***/ },
-/* 58 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var Stream = __webpack_require__(6);
-
-	var _require = __webpack_require__(3);
-
-	var VALUE = _require.VALUE;
-	var ERROR = _require.ERROR;
-	var END = _require.END;
-
-	var _require2 = __webpack_require__(2);
-
-	var inherit = _require2.inherit;
-
-	var _require3 = __webpack_require__(5);
-
-	var map = _require3.map;
-	var cloneArray = _require3.cloneArray;
-
-	var _require4 = __webpack_require__(21);
-
-	var spread = _require4.spread;
-
-	var never = __webpack_require__(8);
-
-	var isArray = Array.isArray || function (xs) {
-	  return Object.prototype.toString.call(xs) === '[object Array]';
-	};
-
-	function Zip(sources, combinator) {
-	  var _this = this;
-
-	  Stream.call(this);
-
-	  this._buffers = map(sources, function (source) {
-	    return isArray(source) ? cloneArray(source) : [];
-	  });
-	  this._sources = map(sources, function (source) {
-	    return isArray(source) ? never() : source;
-	  });
-
-	  this._combinator = combinator ? spread(combinator, this._sources.length) : function (x) {
-	    return x;
-	  };
-	  this._aliveCount = 0;
-
-	  this._$handlers = [];
-
-	  var _loop = function (i) {
-	    _this._$handlers.push(function (event) {
-	      return _this._handleAny(i, event);
-	    });
-	  };
-
-	  for (var i = 0; i < this._sources.length; i++) {
-	    _loop(i);
-	  }
-	}
-
-	inherit(Zip, Stream, {
-
-	  _name: 'zip',
-
-	  _onActivation: function _onActivation() {
-
-	    // if all sources are arrays
-	    while (this._isFull()) {
-	      this._emit();
-	    }
-
-	    var length = this._sources.length;
-	    this._aliveCount = length;
-	    for (var i = 0; i < length && this._active; i++) {
-	      this._sources[i].onAny(this._$handlers[i]);
-	    }
-	  },
-
-	  _onDeactivation: function _onDeactivation() {
-	    for (var i = 0; i < this._sources.length; i++) {
-	      this._sources[i].offAny(this._$handlers[i]);
-	    }
-	  },
-
-	  _emit: function _emit() {
-	    var values = new Array(this._buffers.length);
-	    for (var i = 0; i < this._buffers.length; i++) {
-	      values[i] = this._buffers[i].shift();
-	    }
-	    var combinator = this._combinator;
-	    this._emitValue(combinator(values));
-	  },
-
-	  _isFull: function _isFull() {
-	    for (var i = 0; i < this._buffers.length; i++) {
-	      if (this._buffers[i].length === 0) {
-	        return false;
-	      }
-	    }
-	    return true;
-	  },
-
-	  _handleAny: function _handleAny(i, event) {
-	    if (event.type === VALUE) {
-	      this._buffers[i].push(event.value);
-	      if (this._isFull()) {
-	        this._emit();
-	      }
-	    }
-	    if (event.type === ERROR) {
-	      this._emitError(event.value);
-	    }
-	    if (event.type === END) {
-	      this._aliveCount--;
-	      if (this._aliveCount === 0) {
-	        this._emitEnd();
-	      }
-	    }
-	  },
-
-	  _clear: function _clear() {
-	    Stream.prototype._clear.call(this);
-	    this._sources = null;
-	    this._buffers = null;
-	    this._combinator = null;
-	    this._$handlers = null;
-	  }
-
-	});
-
-	module.exports = function zip(observables, combinator /* Function | falsey */) {
-	  return observables.length === 0 ? never() : new Zip(observables, combinator);
-	};
-
-/***/ },
-/* 59 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var AbstractPool = __webpack_require__(60);
-	var never = __webpack_require__(8);
-
-	function Merge(sources) {
-	  AbstractPool.call(this);
-	  this._addAll(sources);
-	  this._initialised = true;
-	}
-
-	inherit(Merge, AbstractPool, {
-
-	  _name: 'merge',
-
-	  _onEmpty: function _onEmpty() {
-	    if (this._initialised) {
-	      this._emitEnd();
-	    }
-	  }
-
-	});
-
-	module.exports = function merge(observables) {
-	  return observables.length === 0 ? never() : new Merge(observables);
-	};
-
-/***/ },
-/* 60 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var Stream = __webpack_require__(6);
-
-	var _require = __webpack_require__(3);
-
-	var VALUE = _require.VALUE;
-	var ERROR = _require.ERROR;
-
-	var _require2 = __webpack_require__(2);
-
-	var inherit = _require2.inherit;
-
-	var _require3 = __webpack_require__(5);
-
-	var concat = _require3.concat;
-	var forEach = _require3.forEach;
-	var findByPred = _require3.findByPred;
-	var find = _require3.find;
-	var remove = _require3.remove;
-	var cloneArray = _require3.cloneArray;
-
-	var id = function id(x) {
-	  return x;
-	};
-
-	function AbstractPool() {
-	  var _this = this;
-
-	  var _ref = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
-
-	  var _ref$queueLim = _ref.queueLim;
-	  var queueLim = _ref$queueLim === undefined ? 0 : _ref$queueLim;
-	  var _ref$concurLim = _ref.concurLim;
-	  var concurLim = _ref$concurLim === undefined ? -1 : _ref$concurLim;
-	  var _ref$drop = _ref.drop;
-	  var drop = _ref$drop === undefined ? 'new' : _ref$drop;
-
-	  Stream.call(this);
-
-	  this._queueLim = queueLim < 0 ? -1 : queueLim;
-	  this._concurLim = concurLim < 0 ? -1 : concurLim;
-	  this._drop = drop;
-	  this._queue = [];
-	  this._curSources = [];
-	  this._$handleSubAny = function (event) {
-	    return _this._handleSubAny(event);
-	  };
-	  this._$endHandlers = [];
-	  this._currentlyAdding = null;
-
-	  if (this._concurLim === 0) {
-	    this._emitEnd();
-	  }
-	}
-
-	inherit(AbstractPool, Stream, {
-
-	  _name: 'abstractPool',
-
-	  _add: function _add(obj, toObs /* Function | falsey */) {
-	    toObs = toObs || id;
-	    if (this._concurLim === -1 || this._curSources.length < this._concurLim) {
-	      this._addToCur(toObs(obj));
-	    } else {
-	      if (this._queueLim === -1 || this._queue.length < this._queueLim) {
-	        this._addToQueue(toObs(obj));
-	      } else if (this._drop === 'old') {
-	        this._removeOldest();
-	        this._add(obj, toObs);
-	      }
-	    }
-	  },
-
-	  _addAll: function _addAll(obss) {
-	    var _this2 = this;
-
-	    forEach(obss, function (obs) {
-	      return _this2._add(obs);
-	    });
-	  },
-
-	  _remove: function _remove(obs) {
-	    if (this._removeCur(obs) === -1) {
-	      this._removeQueue(obs);
-	    }
-	  },
-
-	  _addToQueue: function _addToQueue(obs) {
-	    this._queue = concat(this._queue, [obs]);
-	  },
-
-	  _addToCur: function _addToCur(obs) {
-	    if (this._active) {
-
-	      // HACK:
-	      //
-	      // We have two optimizations for cases when `obs` is ended. We don't want
-	      // to add such observable to the list, but only want to emit events
-	      // from it (if it has some).
-	      //
-	      // Instead of this hacks, we could just did following,
-	      // but it would be 5-8 times slower:
-	      //
-	      //     this._curSources = concat(this._curSources, [obs]);
-	      //     this._subscribe(obs);
-	      //
-
-	      // #1
-	      // This one for cases when `obs` already ended
-	      // e.g., Kefir.constant() or Kefir.never()
-	      if (!obs._alive) {
-	        if (obs._currentEvent) {
-	          this._emit(obs._currentEvent.type, obs._currentEvent.value);
-	        }
-	        return;
-	      }
-
-	      // #2
-	      // This one is for cases when `obs` going to end synchronously on
-	      // first subscriber e.g., Kefir.stream(em => {em.emit(1); em.end()})
-	      this._currentlyAdding = obs;
-	      obs.onAny(this._$handleSubAny);
-	      this._currentlyAdding = null;
-	      if (obs._alive) {
-	        this._curSources = concat(this._curSources, [obs]);
-	        if (this._active) {
-	          this._subToEnd(obs);
-	        }
-	      }
-	    } else {
-	      this._curSources = concat(this._curSources, [obs]);
-	    }
-	  },
-
-	  _subToEnd: function _subToEnd(obs) {
-	    var _this3 = this;
-
-	    var onEnd = function onEnd() {
-	      return _this3._removeCur(obs);
-	    };
-	    this._$endHandlers.push({ obs: obs, handler: onEnd });
-	    obs.onEnd(onEnd);
-	  },
-
-	  _subscribe: function _subscribe(obs) {
-	    obs.onAny(this._$handleSubAny);
-
-	    // it can become inactive in responce of subscribing to `obs.onAny` above
-	    if (this._active) {
-	      this._subToEnd(obs);
-	    }
-	  },
-
-	  _unsubscribe: function _unsubscribe(obs) {
-	    obs.offAny(this._$handleSubAny);
-
-	    var onEndI = findByPred(this._$endHandlers, function (obj) {
-	      return obj.obs === obs;
-	    });
-	    if (onEndI !== -1) {
-	      obs.offEnd(this._$endHandlers[onEndI].handler);
-	      this._$endHandlers.splice(onEndI, 1);
-	    }
-	  },
-
-	  _handleSubAny: function _handleSubAny(event) {
-	    if (event.type === VALUE) {
-	      this._emitValue(event.value);
-	    } else if (event.type === ERROR) {
-	      this._emitError(event.value);
-	    }
-	  },
-
-	  _removeQueue: function _removeQueue(obs) {
-	    var index = find(this._queue, obs);
-	    this._queue = remove(this._queue, index);
-	    return index;
-	  },
-
-	  _removeCur: function _removeCur(obs) {
-	    if (this._active) {
-	      this._unsubscribe(obs);
-	    }
-	    var index = find(this._curSources, obs);
-	    this._curSources = remove(this._curSources, index);
-	    if (index !== -1) {
-	      if (this._queue.length !== 0) {
-	        this._pullQueue();
-	      } else if (this._curSources.length === 0) {
-	        this._onEmpty();
-	      }
-	    }
-	    return index;
-	  },
-
-	  _removeOldest: function _removeOldest() {
-	    this._removeCur(this._curSources[0]);
-	  },
-
-	  _pullQueue: function _pullQueue() {
-	    if (this._queue.length !== 0) {
-	      this._queue = cloneArray(this._queue);
-	      this._addToCur(this._queue.shift());
-	    }
-	  },
-
-	  _onActivation: function _onActivation() {
-	    for (var i = 0, sources = this._curSources; i < sources.length && this._active; i++) {
-	      this._subscribe(sources[i]);
-	    }
-	  },
-
-	  _onDeactivation: function _onDeactivation() {
-	    for (var i = 0, sources = this._curSources; i < sources.length; i++) {
-	      this._unsubscribe(sources[i]);
-	    }
-	    if (this._currentlyAdding !== null) {
-	      this._unsubscribe(this._currentlyAdding);
-	    }
-	  },
-
-	  _isEmpty: function _isEmpty() {
-	    return this._curSources.length === 0;
-	  },
-
-	  _onEmpty: function _onEmpty() {},
-
-	  _clear: function _clear() {
-	    Stream.prototype._clear.call(this);
-	    this._queue = null;
-	    this._curSources = null;
-	    this._$handleSubAny = null;
-	    this._$endHandlers = null;
-	  }
-
-	});
-
-	module.exports = AbstractPool;
-
-/***/ },
-/* 61 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var repeat = __webpack_require__(62);
-
-	module.exports = function concat(observables) {
-	  return repeat(function (index) {
-	    return observables.length > index ? observables[index] : false;
-	  }).setName('concat');
-	};
-
-/***/ },
-/* 62 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var Stream = __webpack_require__(6);
-
-	var _require2 = __webpack_require__(3);
-
-	var END = _require2.END;
-
-	function S(generator) {
-	  var _this = this;
-
-	  Stream.call(this);
-	  this._generator = generator;
-	  this._source = null;
-	  this._inLoop = false;
-	  this._iteration = 0;
-	  this._$handleAny = function (event) {
-	    return _this._handleAny(event);
-	  };
-	}
-
-	inherit(S, Stream, {
-
-	  _name: 'repeat',
-
-	  _handleAny: function _handleAny(event) {
-	    if (event.type === END) {
-	      this._source = null;
-	      this._getSource();
-	    } else {
-	      this._emit(event.type, event.value);
-	    }
-	  },
-
-	  _getSource: function _getSource() {
-	    if (!this._inLoop) {
-	      this._inLoop = true;
-	      var generator = this._generator;
-	      while (this._source === null && this._alive && this._active) {
-	        this._source = generator(this._iteration++);
-	        if (this._source) {
-	          this._source.onAny(this._$handleAny);
-	        } else {
-	          this._emitEnd();
-	        }
-	      }
-	      this._inLoop = false;
-	    }
-	  },
-
-	  _onActivation: function _onActivation() {
-	    if (this._source) {
-	      this._source.onAny(this._$handleAny);
-	    } else {
-	      this._getSource();
-	    }
-	  },
-
-	  _onDeactivation: function _onDeactivation() {
-	    if (this._source) {
-	      this._source.offAny(this._$handleAny);
-	    }
-	  },
-
-	  _clear: function _clear() {
-	    Stream.prototype._clear.call(this);
-	    this._generator = null;
-	    this._source = null;
-	    this._$handleAny = null;
-	  }
-
-	});
-
-	module.exports = function (generator) {
-	  return new S(generator);
-	};
-
-/***/ },
-/* 63 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var AbstractPool = __webpack_require__(60);
-
-	function Pool() {
-	  AbstractPool.call(this);
-	}
-
-	inherit(Pool, AbstractPool, {
-
-	  _name: 'pool',
-
-	  plug: function plug(obs) {
-	    this._add(obs);
-	    return this;
-	  },
-
-	  unplug: function unplug(obs) {
-	    this._remove(obs);
-	    return this;
-	  }
-
-	});
-
-	module.exports = Pool;
-
-/***/ },
-/* 64 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(3);
-
-	var VALUE = _require.VALUE;
-	var ERROR = _require.ERROR;
-	var END = _require.END;
-
-	var _require2 = __webpack_require__(2);
-
-	var inherit = _require2.inherit;
-
-	var AbstractPool = __webpack_require__(60);
-
-	function FlatMap(source, fn, options) {
-	  var _this = this;
-
-	  AbstractPool.call(this, options);
-	  this._source = source;
-	  this._fn = fn;
-	  this._mainEnded = false;
-	  this._lastCurrent = null;
-	  this._$handleMain = function (event) {
-	    return _this._handleMain(event);
-	  };
-	}
-
-	inherit(FlatMap, AbstractPool, {
-
-	  _onActivation: function _onActivation() {
-	    AbstractPool.prototype._onActivation.call(this);
-	    if (this._active) {
-	      this._source.onAny(this._$handleMain);
-	    }
-	  },
-
-	  _onDeactivation: function _onDeactivation() {
-	    AbstractPool.prototype._onDeactivation.call(this);
-	    this._source.offAny(this._$handleMain);
-	    this._hadNoEvSinceDeact = true;
-	  },
-
-	  _handleMain: function _handleMain(event) {
-
-	    if (event.type === VALUE) {
-	      // Is latest value before deactivation survived, and now is 'current' on this activation?
-	      // We don't want to handle such values, to prevent to constantly add
-	      // same observale on each activation/deactivation when our main source
-	      // is a `Kefir.conatant()` for example.
-	      var sameCurr = this._activating && this._hadNoEvSinceDeact && this._lastCurrent === event.value;
-	      if (!sameCurr) {
-	        this._add(event.value, this._fn);
-	      }
-	      this._lastCurrent = event.value;
-	      this._hadNoEvSinceDeact = false;
-	    }
-
-	    if (event.type === ERROR) {
-	      this._emitError(event.value);
-	    }
-
-	    if (event.type === END) {
-	      if (this._isEmpty()) {
-	        this._emitEnd();
-	      } else {
-	        this._mainEnded = true;
-	      }
-	    }
-	  },
-
-	  _onEmpty: function _onEmpty() {
-	    if (this._mainEnded) {
-	      this._emitEnd();
-	    }
-	  },
-
-	  _clear: function _clear() {
-	    AbstractPool.prototype._clear.call(this);
-	    this._source = null;
-	    this._lastCurrent = null;
-	    this._$handleMain = null;
-	  }
-
-	});
-
-	module.exports = FlatMap;
-
-/***/ },
-/* 65 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(3);
-
-	var VALUE = _require.VALUE;
-	var ERROR = _require.ERROR;
-	var END = _require.END;
-
-	var _require2 = __webpack_require__(2);
-
-	var inherit = _require2.inherit;
-
-	var FlatMap = __webpack_require__(64);
-
-	function FlatMapErrors(source, fn) {
-	  FlatMap.call(this, source, fn);
-	}
-
-	inherit(FlatMapErrors, FlatMap, {
-
-	  // Same as in FlatMap, only VALUE/ERROR flipped
-	  _handleMain: function _handleMain(event) {
-
-	    if (event.type === ERROR) {
-	      var sameCurr = this._activating && this._hadNoEvSinceDeact && this._lastCurrent === event.value;
-	      if (!sameCurr) {
-	        this._add(event.value, this._fn);
-	      }
-	      this._lastCurrent = event.value;
-	      this._hadNoEvSinceDeact = false;
-	    }
-
-	    if (event.type === VALUE) {
-	      this._emitValue(event.value);
-	    }
-
-	    if (event.type === END) {
-	      if (this._isEmpty()) {
-	        this._emitEnd();
-	      } else {
-	        this._mainEnded = true;
-	      }
-	    }
-	  }
-
-	});
-
-	module.exports = FlatMapErrors;
-
-/***/ },
-/* 66 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(67);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var NOTHING = _require2.NOTHING;
-
-	var mixin = {
-
-	  _handlePrimaryValue: function _handlePrimaryValue(x) {
-	    if (this._lastSecondary !== NOTHING && this._lastSecondary) {
-	      this._emitValue(x);
-	    }
-	  },
-
-	  _handleSecondaryEnd: function _handleSecondaryEnd() {
-	    if (this._lastSecondary === NOTHING || !this._lastSecondary) {
-	      this._emitEnd();
-	    }
-	  }
-
-	};
-
-	var S = createStream('filterBy', mixin);
-	var P = createProperty('filterBy', mixin);
-
-	module.exports = function filterBy(primary, secondary) {
-	  return new (primary._ofSameType(S, P))(primary, secondary);
-	};
-
-/***/ },
-/* 67 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var Stream = __webpack_require__(6);
-	var Property = __webpack_require__(7);
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var _require2 = __webpack_require__(3);
-
-	var VALUE = _require2.VALUE;
-	var ERROR = _require2.ERROR;
-	var END = _require2.END;
-	var NOTHING = _require2.NOTHING;
-
-	function createConstructor(BaseClass, name) {
-	  return function AnonymousObservable(primary, secondary, options) {
-	    var _this = this;
-
-	    BaseClass.call(this);
-	    this._primary = primary;
-	    this._secondary = secondary;
-	    this._name = primary._name + '.' + name;
-	    this._lastSecondary = NOTHING;
-	    this._$handleSecondaryAny = function (event) {
-	      return _this._handleSecondaryAny(event);
-	    };
-	    this._$handlePrimaryAny = function (event) {
-	      return _this._handlePrimaryAny(event);
-	    };
-	    this._init(options);
-	  };
-	}
-
-	function createClassMethods(BaseClass) {
-	  return {
-	    _init: function _init(options) {},
-	    _free: function _free() {},
-
-	    _handlePrimaryValue: function _handlePrimaryValue(x) {
-	      this._emitValue(x);
-	    },
-	    _handlePrimaryError: function _handlePrimaryError(x) {
-	      this._emitError(x);
-	    },
-	    _handlePrimaryEnd: function _handlePrimaryEnd() {
-	      this._emitEnd();
-	    },
-
-	    _handleSecondaryValue: function _handleSecondaryValue(x) {
-	      this._lastSecondary = x;
-	    },
-	    _handleSecondaryError: function _handleSecondaryError(x) {
-	      this._emitError(x);
-	    },
-	    _handleSecondaryEnd: function _handleSecondaryEnd() {},
-
-	    _handlePrimaryAny: function _handlePrimaryAny(event) {
-	      switch (event.type) {
-	        case VALUE:
-	          return this._handlePrimaryValue(event.value);
-	        case ERROR:
-	          return this._handlePrimaryError(event.value);
-	        case END:
-	          return this._handlePrimaryEnd(event.value);
-	      }
-	    },
-	    _handleSecondaryAny: function _handleSecondaryAny(event) {
-	      switch (event.type) {
-	        case VALUE:
-	          return this._handleSecondaryValue(event.value);
-	        case ERROR:
-	          return this._handleSecondaryError(event.value);
-	        case END:
-	          this._handleSecondaryEnd(event.value);
-	          this._removeSecondary();
-	      }
-	    },
-
-	    _removeSecondary: function _removeSecondary() {
-	      if (this._secondary !== null) {
-	        this._secondary.offAny(this._$handleSecondaryAny);
-	        this._$handleSecondaryAny = null;
-	        this._secondary = null;
-	      }
-	    },
-
-	    _onActivation: function _onActivation() {
-	      if (this._secondary !== null) {
-	        this._secondary.onAny(this._$handleSecondaryAny);
-	      }
-	      if (this._active) {
-	        this._primary.onAny(this._$handlePrimaryAny);
-	      }
-	    },
-	    _onDeactivation: function _onDeactivation() {
-	      if (this._secondary !== null) {
-	        this._secondary.offAny(this._$handleSecondaryAny);
-	      }
-	      this._primary.offAny(this._$handlePrimaryAny);
-	    },
-
-	    _clear: function _clear() {
-	      BaseClass.prototype._clear.call(this);
-	      this._primary = null;
-	      this._secondary = null;
-	      this._lastSecondary = null;
-	      this._$handleSecondaryAny = null;
-	      this._$handlePrimaryAny = null;
-	      this._free();
-	    }
-
-	  };
-	}
-
-	function createStream(name, mixin) {
-	  var S = createConstructor(Stream, name);
-	  inherit(S, Stream, createClassMethods(Stream), mixin);
-	  return S;
-	}
-
-	function createProperty(name, mixin) {
-	  var P = createConstructor(Property, name);
-	  inherit(P, Property, createClassMethods(Property), mixin);
-	  return P;
-	}
-
-	module.exports = { createStream: createStream, createProperty: createProperty };
-
-/***/ },
-/* 68 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var combine = __webpack_require__(57);
-
-	var id2 = function id2(_, x) {
-	  return x;
-	};
-
-	module.exports = function sampledBy(passive, active, combinator) {
-	  var _combinator = combinator ? function (a, b) {
-	    return combinator(b, a);
-	  } : id2;
-	  return combine([active], [passive], _combinator).setName(passive, 'sampledBy');
-	};
-
-/***/ },
-/* 69 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(67);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var NOTHING = _require2.NOTHING;
-
-	var mixin = {
-
-	  _handlePrimaryValue: function _handlePrimaryValue(x) {
-	    if (this._lastSecondary !== NOTHING) {
-	      this._emitValue(x);
-	    }
-	  },
-
-	  _handleSecondaryEnd: function _handleSecondaryEnd() {
-	    if (this._lastSecondary === NOTHING) {
-	      this._emitEnd();
-	    }
-	  }
-
-	};
-
-	var S = createStream('skipUntilBy', mixin);
-	var P = createProperty('skipUntilBy', mixin);
-
-	module.exports = function skipUntilBy(primary, secondary) {
-	  return new (primary._ofSameType(S, P))(primary, secondary);
-	};
-
-/***/ },
-/* 70 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(67);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _handleSecondaryValue: function _handleSecondaryValue(x) {
-	    this._emitEnd();
-	  }
-
-	};
-
-	var S = createStream('takeUntilBy', mixin);
-	var P = createProperty('takeUntilBy', mixin);
-
-	module.exports = function takeUntilBy(primary, secondary) {
-	  return new (primary._ofSameType(S, P))(primary, secondary);
-	};
-
-/***/ },
-/* 71 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(67);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init() {
-	    var _ref = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
-
-	    var _ref$flushOnEnd = _ref.flushOnEnd;
-	    var flushOnEnd = _ref$flushOnEnd === undefined ? true : _ref$flushOnEnd;
-
-	    this._buff = [];
-	    this._flushOnEnd = flushOnEnd;
-	  },
-
-	  _free: function _free() {
-	    this._buff = null;
-	  },
-
-	  _flush: function _flush() {
-	    if (this._buff !== null) {
-	      this._emitValue(this._buff);
-	      this._buff = [];
-	    }
-	  },
-
-	  _handlePrimaryEnd: function _handlePrimaryEnd() {
-	    if (this._flushOnEnd) {
-	      this._flush();
-	    }
-	    this._emitEnd();
-	  },
-
-	  _onActivation: function _onActivation() {
-	    this._primary.onAny(this._$handlePrimaryAny);
-	    if (this._alive && this._secondary !== null) {
-	      this._secondary.onAny(this._$handleSecondaryAny);
-	    }
-	  },
-
-	  _handlePrimaryValue: function _handlePrimaryValue(x) {
-	    this._buff.push(x);
-	  },
-
-	  _handleSecondaryValue: function _handleSecondaryValue(x) {
-	    this._flush();
-	  },
-
-	  _handleSecondaryEnd: function _handleSecondaryEnd(x) {
-	    if (!this._flushOnEnd) {
-	      this._emitEnd();
-	    }
-	  }
-
-	};
-
-	var S = createStream('bufferBy', mixin);
-	var P = createProperty('bufferBy', mixin);
-
-	module.exports = function bufferBy(primary, secondary, options /* optional */) {
-	  return new (primary._ofSameType(S, P))(primary, secondary, options);
-	};
-
-/***/ },
-/* 72 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(67);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var NOTHING = _require2.NOTHING;
-
-	var mixin = {
-
-	  _init: function _init() {
-	    var _ref = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
-
-	    var _ref$flushOnEnd = _ref.flushOnEnd;
-	    var flushOnEnd = _ref$flushOnEnd === undefined ? true : _ref$flushOnEnd;
-	    var _ref$flushOnChange = _ref.flushOnChange;
-	    var flushOnChange = _ref$flushOnChange === undefined ? false : _ref$flushOnChange;
-	    var _ref$emitEmpty = _ref.emitEmpty;
-	    var emitEmpty = _ref$emitEmpty === undefined ? false : _ref$emitEmpty;
-
-	    this._buff = [];
-	    this._emitEmpty = emitEmpty;
-	    this._flushOnEnd = flushOnEnd;
-	    this._flushOnChange = flushOnChange;
-	  },
-
-	  _free: function _free() {
-	    this._buff = null;
-	  },
-
-	  _flush: function _flush() {
-	    if (this._buff !== null && (this._emitEmpty || this._buff.length > 0)) {
-	      this._emitValue(this._buff);
-	      this._buff = [];
-	    }
-	  },
-
-	  _handlePrimaryEnd: function _handlePrimaryEnd() {
-	    if (this._flushOnEnd) {
-	      this._flush();
-	    }
-	    this._emitEnd();
-	  },
-
-	  _handlePrimaryValue: function _handlePrimaryValue(x) {
-	    this._buff.push(x);
-	    if (this._lastSecondary !== NOTHING && !this._lastSecondary) {
-	      this._flush();
-	    }
-	  },
-
-	  _handleSecondaryEnd: function _handleSecondaryEnd(x) {
-	    if (!this._flushOnEnd && (this._lastSecondary === NOTHING || this._lastSecondary)) {
-	      this._emitEnd();
-	    }
-	  },
-
-	  _handleSecondaryValue: function _handleSecondaryValue(x) {
-	    if (this._flushOnChange && !x) {
-	      this._flush();
-	    }
-
-	    // from default _handleSecondaryValue
-	    this._lastSecondary = x;
-	  }
-
-	};
-
-	var S = createStream('bufferWhileBy', mixin);
-	var P = createProperty('bufferWhileBy', mixin);
-
-	module.exports = function bufferWhileBy(primary, secondary, options /* optional */) {
-	  return new (primary._ofSameType(S, P))(primary, secondary, options);
-	};
-
-/***/ },
-/* 73 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var merge = __webpack_require__(59);
-	var map = __webpack_require__(29);
-	var skipDuplicates = __webpack_require__(36);
-	var toProperty = __webpack_require__(25);
-
-	var f = function f() {
-	  return false;
-	};
-	var t = function t() {
-	  return true;
-	};
-
-	module.exports = function awaiting(a, b) {
-	  var result = merge([map(a, t), map(b, f)]);
-	  result = skipDuplicates(result);
-	  result = toProperty(result, f);
-	  return result.setName(a, 'awaiting');
-	};
-
-/***/ },
-/* 74 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var Stream = __webpack_require__(6);
-
-	function Emitter() {
-	  Stream.call(this);
-	}
-
-	inherit(Emitter, Stream, {
-
-	  _name: 'emitter',
-
-	  emit: function emit(x) {
-	    this._emitValue(x);
-	    return this;
-	  },
-
-	  error: function error(x) {
-	    this._emitError(x);
-	    return this;
-	  },
-
-	  end: function end() {
-	    this._emitEnd();
-	    return this;
-	  },
-
-	  emitEvent: function emitEvent(event) {
-	    this._emit(event.type, event.value);
-	  }
-
-	});
-
-	module.exports = Emitter;
-
-/***/ },
-/* 75 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(2);
-
-	var inherit = _require.inherit;
-
-	var AbstractPool = __webpack_require__(60);
-
-	function Bus() {
-	  AbstractPool.call(this);
-	}
-
-	inherit(Bus, AbstractPool, {
-
-	  _name: 'bus',
-
-	  plug: function plug(obs) {
-	    this._add(obs);
-	    return this;
-	  },
-	  unplug: function unplug(obs) {
-	    this._remove(obs);
-	    return this;
-	  },
-
-	  emit: function emit(x) {
-	    this._emitValue(x);
-	    return this;
-	  },
-	  error: function error(x) {
-	    this._emitError(x);
-	    return this;
-	  },
-	  end: function end() {
-	    this._emitEnd();
-	    return this;
-	  },
-	  emitEvent: function emitEvent(event) {
-	    this._emit(event.type, event.value);
-	  }
-
-	});
-
-	module.exports = Bus;
-
-/***/ },
-/* 76 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(26);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var NOTHING = _require2.NOTHING;
-
-	var mixin = {
-
-	  _init: function _init(_ref) {
-	    var fn = _ref.fn;
-	    var seed = _ref.seed;
-
-	    this._fn = fn;
-	    this._result = seed;
-	  },
-
-	  _free: function _free() {
-	    this._fn = null;
-	    this._result = null;
-	  },
-
-	  _handleValue: function _handleValue(x) {
-	    var fn = this._fn;
-	    this._result = this._result === NOTHING ? x : fn(this._result, x);
-	  },
-
-	  _handleEnd: function _handleEnd() {
-	    if (this._result !== NOTHING) {
-	      this._emitValue(this._result);
-	    }
-	    this._emitEnd();
-	  }
-
-	};
-
-	var S = createStream('reduce', mixin);
-	var P = createProperty('reduce', mixin);
-
-	module.exports = function reduce(obs, fn) {
-	  var seed = arguments.length <= 2 || arguments[2] === undefined ? NOTHING : arguments[2];
-
-	  return new (obs._ofSameType(S, P))(obs, { fn: fn, seed: seed });
-	};
-
-/***/ },
-/* 77 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var combine = __webpack_require__(57);
-
-	var _require = __webpack_require__(21);
-
-	var apply = _require.apply;
-
-	var _require2 = __webpack_require__(5);
-
-	var circleShift = _require2.circleShift;
-
-	module.exports = function sampledBy(passive, active, combinator) {
-
-	  var _combinator = combinator;
-
-	  // we need to flip `passive` and `active` in combinator function
-	  if (passive.length > 0) {
-	    _combinator = function () {
-	      var args = circleShift(arguments, passive.length);
-	      return combinator ? apply(combinator, null, args) : args;
-	    };
-	  }
-
-	  return combine(active, passive, _combinator).setName('sampledBy');
-	};
-
-/***/ },
-/* 78 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var timeBased = __webpack_require__(10);
-
-	var _require = __webpack_require__(5);
-
-	var cloneArray = _require.cloneArray;
-
-	var S = timeBased({
-
-	  _name: 'repeatedly',
-
-	  _init: function _init(_ref) {
-	    var xs = _ref.xs;
-
-	    this._xs = cloneArray(xs);
-	    this._i = -1;
-	  },
-
-	  _onTick: function _onTick() {
-	    if (this._xs.length > 0) {
-	      this._i = (this._i + 1) % this._xs.length;
-	      this._emitValue(this._xs[this._i]);
-	    }
-	  }
-
-	});
-
-	module.exports = function repeatedly(wait, xs) {
-	  return new S(wait, { xs: xs });
-	};
-
-/***/ },
-/* 79 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var map = __webpack_require__(29);
-
-	module.exports = function mapTo(obs, x) {
-	  return map(obs, function () {
-	    return x;
-	  }).setName(obs, 'mapTo');
-	};
-
-/***/ },
-/* 80 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var map = __webpack_require__(29);
-
-	module.exports = function tap(obs, fn) {
-	  return map(obs, function (x) {
-	    fn(x);return x;
-	  }).setName(obs, 'tap');
-	};
-
-/***/ },
-/* 81 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var map = __webpack_require__(29);
-
-	module.exports = function pluck(obs, propName) {
-	  return map(obs, function (x) {
-	    return x[propName];
-	  }).setName(obs, 'pluck');
-	};
-
-/***/ },
-/* 82 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var map = __webpack_require__(29);
-
-	var _require = __webpack_require__(21);
-
-	var apply = _require.apply;
-
-	module.exports = function invoke(obs, methodName, args) {
-
-	  var fn = args.length === 0 ? function (x) {
-	    return x[methodName]();
-	  } : function (x) {
-	    return apply(x[methodName], x, args);
-	  };
-
-	  return map(obs, fn).setName(obs, 'invoke');
-	};
-
-/***/ },
-/* 83 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var map = __webpack_require__(29);
-	var now = __webpack_require__(42);
-
-	module.exports = function timestamp(obs) {
-	  return map(obs, function (x) {
-	    return { value: x, time: now() };
-	  }).setName(obs, 'timestamp');
-	};
-
-/***/ },
-/* 84 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var combine = __webpack_require__(57);
-
-	function fn() {
-	  var i = undefined;
-	  for (i = 0; i < arguments.length; i++) {
-	    if (!arguments[i]) {
-	      return arguments[i];
-	    }
-	  }
-	  return arguments[i - 1];
-	}
-
-	module.exports = function and(observables) {
-	  return combine(observables, [], fn).setName('and');
-	};
-
-/***/ },
-/* 85 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var combine = __webpack_require__(57);
-
-	function fn() {
-	  var i = undefined;
-	  for (i = 0; i < arguments.length; i++) {
-	    if (arguments[i]) {
-	      return arguments[i];
-	    }
-	  }
-	  return arguments[i - 1];
-	}
-
-	module.exports = function or(observables) {
-	  return combine(observables, [], fn).setName('or');
-	};
-
-/***/ },
-/* 86 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var map = __webpack_require__(29);
-
-	module.exports = function not(obs) {
-	  return map(obs, function (x) {
-	    return !x;
-	  }).setName(obs, 'not');
-	};
-
-/***/ },
-/* 87 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(67);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var _require2 = __webpack_require__(3);
-
-	var NOTHING = _require2.NOTHING;
-
-	var mixin = {
-
-	  _handlePrimaryValue: function _handlePrimaryValue(x) {
-	    if (this._lastSecondary !== NOTHING) {
-	      this._emitValue(x);
-	    }
-	  },
-
-	  _handleSecondaryValue: function _handleSecondaryValue(x) {
-	    this._lastSecondary = x;
-	    if (!this._lastSecondary) {
-	      this._emitEnd();
-	    }
-	  },
-
-	  _handleSecondaryEnd: function _handleSecondaryEnd() {
-	    if (this._lastSecondary === NOTHING) {
-	      this._emitEnd();
-	    }
-	  }
-
-	};
-
-	var S = createStream('takeWhileBy', mixin);
-	var P = createProperty('takeWhileBy', mixin);
-
-	module.exports = function takeWhileBy(primary, secondary) {
-	  return new (primary._ofSameType(S, P))(primary, secondary);
-	};
-
-/***/ },
-/* 88 */
-/***/ function(module, exports, __webpack_require__) {
-
-	'use strict';
-
-	var _require = __webpack_require__(67);
-
-	var createStream = _require.createStream;
-	var createProperty = _require.createProperty;
-
-	var mixin = {
-
-	  _init: function _init() {
-	    this._hasFalseyFromSecondary = false;
-	  },
-
-	  _handlePrimaryValue: function _handlePrimaryValue(x) {
-	    if (this._hasFalseyFromSecondary) {
-	      this._emitValue(x);
-	    }
-	  },
-
-	  _handleSecondaryValue: function _handleSecondaryValue(x) {
-	    this._hasFalseyFromSecondary = this._hasFalseyFromSecondary || !x;
-	  },
-
-	  _handleSecondaryEnd: function _handleSecondaryEnd() {
-	    if (!this._hasFalseyFromSecondary) {
-	      this._emitEnd();
-	    }
-	  }
-
-	};
-
-	var S = createStream('skipWhileBy', mixin);
-	var P = createProperty('skipWhileBy', mixin);
-
-	module.exports = function skipWhileBy(primary, secondary) {
-	  return new (primary._ofSameType(S, P))(primary, secondary);
-	};
-
-/***/ }
-/******/ ])
-});
-;
+(function (global, factory) {
+  typeof exports === 'object' && typeof module !== 'undefined' ? factory(exports) :
+  typeof define === 'function' && define.amd ? define(['exports'], factory) :
+  (factory((global.Kefir = global.Kefir || {})));
+}(this, function (exports) { 'use strict';
+
+  function createObj(proto) {
+    var F = function () {};
+    F.prototype = proto;
+    return new F();
+  }
+
+  function extend(target /*, mixin1, mixin2...*/) {
+    var length = arguments.length,
+        i = undefined,
+        prop = undefined;
+    for (i = 1; i < length; i++) {
+      for (prop in arguments[i]) {
+        target[prop] = arguments[i][prop];
+      }
+    }
+    return target;
+  }
+
+  function inherit(Child, Parent /*, mixin1, mixin2...*/) {
+    var length = arguments.length,
+        i = undefined;
+    Child.prototype = createObj(Parent.prototype);
+    Child.prototype.constructor = Child;
+    for (i = 2; i < length; i++) {
+      extend(Child.prototype, arguments[i]);
+    }
+    return Child;
+  }
+
+  var NOTHING = ['<nothing>'];
+  var END = 'end';
+  var VALUE = 'value';
+  var ERROR = 'error';
+  var ANY = 'any';
+
+  function concat(a, b) {
+    var result = undefined,
+        length = undefined,
+        i = undefined,
+        j = undefined;
+    if (a.length === 0) {
+      return b;
+    }
+    if (b.length === 0) {
+      return a;
+    }
+    j = 0;
+    result = new Array(a.length + b.length);
+    length = a.length;
+    for (i = 0; i < length; i++, j++) {
+      result[j] = a[i];
+    }
+    length = b.length;
+    for (i = 0; i < length; i++, j++) {
+      result[j] = b[i];
+    }
+    return result;
+  }
+
+  function find(arr, value) {
+    var length = arr.length,
+        i = undefined;
+    for (i = 0; i < length; i++) {
+      if (arr[i] === value) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function findByPred(arr, pred) {
+    var length = arr.length,
+        i = undefined;
+    for (i = 0; i < length; i++) {
+      if (pred(arr[i])) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  function cloneArray(input) {
+    var length = input.length,
+        result = new Array(length),
+        i = undefined;
+    for (i = 0; i < length; i++) {
+      result[i] = input[i];
+    }
+    return result;
+  }
+
+  function remove(input, index) {
+    var length = input.length,
+        result = undefined,
+        i = undefined,
+        j = undefined;
+    if (index >= 0 && index < length) {
+      if (length === 1) {
+        return [];
+      } else {
+        result = new Array(length - 1);
+        for (i = 0, j = 0; i < length; i++) {
+          if (i !== index) {
+            result[j] = input[i];
+            j++;
+          }
+        }
+        return result;
+      }
+    } else {
+      return input;
+    }
+  }
+
+  function map(input, fn) {
+    var length = input.length,
+        result = new Array(length),
+        i = undefined;
+    for (i = 0; i < length; i++) {
+      result[i] = fn(input[i]);
+    }
+    return result;
+  }
+
+  function forEach(arr, fn) {
+    var length = arr.length,
+        i = undefined;
+    for (i = 0; i < length; i++) {
+      fn(arr[i]);
+    }
+  }
+
+  function fillArray(arr, value) {
+    var length = arr.length,
+        i = undefined;
+    for (i = 0; i < length; i++) {
+      arr[i] = value;
+    }
+  }
+
+  function contains(arr, value) {
+    return find(arr, value) !== -1;
+  }
+
+  function slide(cur, next, max) {
+    var length = Math.min(max, cur.length + 1),
+        offset = cur.length - length + 1,
+        result = new Array(length),
+        i = undefined;
+    for (i = offset; i < length; i++) {
+      result[i - offset] = cur[i];
+    }
+    result[length - 1] = next;
+    return result;
+  }
+
+  function callSubscriber(type, fn, event) {
+    if (type === ANY) {
+      fn(event);
+    } else if (type === event.type) {
+      if (type === VALUE || type === ERROR) {
+        fn(event.value);
+      } else {
+        fn();
+      }
+    }
+  }
+
+  function Dispatcher() {
+    this._items = [];
+    this._inLoop = 0;
+    this._removedItems = null;
+  }
+
+  extend(Dispatcher.prototype, {
+    add: function (type, fn) {
+      this._items = concat(this._items, [{ type: type, fn: fn }]);
+      return this._items.length;
+    },
+    remove: function (type, fn) {
+      var index = findByPred(this._items, function (x) {
+        return x.type === type && x.fn === fn;
+      });
+
+      // if we're currently in a notification loop,
+      // remember this subscriber was removed
+      if (this._inLoop !== 0 && index !== -1) {
+        if (this._removedItems === null) {
+          this._removedItems = [];
+        }
+        this._removedItems.push(this._items[index]);
+      }
+
+      this._items = remove(this._items, index);
+      return this._items.length;
+    },
+    dispatch: function (event) {
+      this._inLoop++;
+      for (var i = 0, items = this._items; i < items.length; i++) {
+
+        // cleanup was called
+        if (this._items === null) {
+          break;
+        }
+
+        // this subscriber was removed
+        if (this._removedItems !== null && contains(this._removedItems, items[i])) {
+          continue;
+        }
+
+        callSubscriber(items[i].type, items[i].fn, event);
+      }
+      this._inLoop--;
+      if (this._inLoop === 0) {
+        this._removedItems = null;
+      }
+    },
+    cleanup: function () {
+      this._items = null;
+    }
+  });
+
+  function Observable() {
+    this._dispatcher = new Dispatcher();
+    this._active = false;
+    this._alive = true;
+    this._activating = false;
+    this._logHandlers = null;
+  }
+
+  extend(Observable.prototype, {
+
+    _name: 'observable',
+
+    _onActivation: function () {},
+    _onDeactivation: function () {},
+    _setActive: function (active) {
+      if (this._active !== active) {
+        this._active = active;
+        if (active) {
+          this._activating = true;
+          this._onActivation();
+          this._activating = false;
+        } else {
+          this._onDeactivation();
+        }
+      }
+    },
+    _clear: function () {
+      this._setActive(false);
+      this._dispatcher.cleanup();
+      this._dispatcher = null;
+      this._logHandlers = null;
+    },
+    _emit: function (type, x) {
+      switch (type) {
+        case VALUE:
+          return this._emitValue(x);
+        case ERROR:
+          return this._emitError(x);
+        case END:
+          return this._emitEnd();
+      }
+    },
+    _emitValue: function (value) {
+      if (this._alive) {
+        this._dispatcher.dispatch({ type: VALUE, value: value });
+      }
+    },
+    _emitError: function (value) {
+      if (this._alive) {
+        this._dispatcher.dispatch({ type: ERROR, value: value });
+      }
+    },
+    _emitEnd: function () {
+      if (this._alive) {
+        this._alive = false;
+        this._dispatcher.dispatch({ type: END });
+        this._clear();
+      }
+    },
+    _on: function (type, fn) {
+      if (this._alive) {
+        this._dispatcher.add(type, fn);
+        this._setActive(true);
+      } else {
+        callSubscriber(type, fn, { type: END });
+      }
+      return this;
+    },
+    _off: function (type, fn) {
+      if (this._alive) {
+        var count = this._dispatcher.remove(type, fn);
+        if (count === 0) {
+          this._setActive(false);
+        }
+      }
+      return this;
+    },
+    onValue: function (fn) {
+      return this._on(VALUE, fn);
+    },
+    onError: function (fn) {
+      return this._on(ERROR, fn);
+    },
+    onEnd: function (fn) {
+      return this._on(END, fn);
+    },
+    onAny: function (fn) {
+      return this._on(ANY, fn);
+    },
+    offValue: function (fn) {
+      return this._off(VALUE, fn);
+    },
+    offError: function (fn) {
+      return this._off(ERROR, fn);
+    },
+    offEnd: function (fn) {
+      return this._off(END, fn);
+    },
+    offAny: function (fn) {
+      return this._off(ANY, fn);
+    },
+
+
+    // A and B must be subclasses of Stream and Property (order doesn't matter)
+    _ofSameType: function (A, B) {
+      return A.prototype.getType() === this.getType() ? A : B;
+    },
+    setName: function (sourceObs /* optional */, selfName) {
+      this._name = selfName ? sourceObs._name + '.' + selfName : sourceObs;
+      return this;
+    },
+    log: function () {
+      var name = arguments.length <= 0 || arguments[0] === undefined ? this.toString() : arguments[0];
+
+
+      var isCurrent = undefined;
+      var handler = function (event) {
+        var type = '<' + event.type + (isCurrent ? ':current' : '') + '>';
+        if (event.type === END) {
+          console.log(name, type);
+        } else {
+          console.log(name, type, event.value);
+        }
+      };
+
+      if (this._alive) {
+        if (!this._logHandlers) {
+          this._logHandlers = [];
+        }
+        this._logHandlers.push({ name: name, handler: handler });
+      }
+
+      isCurrent = true;
+      this.onAny(handler);
+      isCurrent = false;
+
+      return this;
+    },
+    offLog: function () {
+      var name = arguments.length <= 0 || arguments[0] === undefined ? this.toString() : arguments[0];
+
+
+      if (this._logHandlers) {
+        var handlerIndex = findByPred(this._logHandlers, function (obj) {
+          return obj.name === name;
+        });
+        if (handlerIndex !== -1) {
+          this.offAny(this._logHandlers[handlerIndex].handler);
+          this._logHandlers.splice(handlerIndex, 1);
+        }
+      }
+
+      return this;
+    }
+  });
+
+  // extend() can't handle `toString` in IE8
+  Observable.prototype.toString = function () {
+    return '[' + this._name + ']';
+  };
+
+  function Stream() {
+    Observable.call(this);
+  }
+
+  inherit(Stream, Observable, {
+
+    _name: 'stream',
+
+    getType: function () {
+      return 'stream';
+    }
+  });
+
+  function Property() {
+    Observable.call(this);
+    this._currentEvent = null;
+  }
+
+  inherit(Property, Observable, {
+
+    _name: 'property',
+
+    _emitValue: function (value) {
+      if (this._alive) {
+        this._currentEvent = { type: VALUE, value: value };
+        if (!this._activating) {
+          this._dispatcher.dispatch({ type: VALUE, value: value });
+        }
+      }
+    },
+    _emitError: function (value) {
+      if (this._alive) {
+        this._currentEvent = { type: ERROR, value: value };
+        if (!this._activating) {
+          this._dispatcher.dispatch({ type: ERROR, value: value });
+        }
+      }
+    },
+    _emitEnd: function () {
+      if (this._alive) {
+        this._alive = false;
+        if (!this._activating) {
+          this._dispatcher.dispatch({ type: END });
+        }
+        this._clear();
+      }
+    },
+    _on: function (type, fn) {
+      if (this._alive) {
+        this._dispatcher.add(type, fn);
+        this._setActive(true);
+      }
+      if (this._currentEvent !== null) {
+        callSubscriber(type, fn, this._currentEvent);
+      }
+      if (!this._alive) {
+        callSubscriber(type, fn, { type: END });
+      }
+      return this;
+    },
+    getType: function () {
+      return 'property';
+    }
+  });
+
+  var neverS = new Stream();
+  neverS._emitEnd();
+  neverS._name = 'never';
+
+  function never() {
+    return neverS;
+  }
+
+  function timeBased(mixin) {
+
+    function AnonymousStream(wait, options) {
+      var _this = this;
+
+      Stream.call(this);
+      this._wait = wait;
+      this._intervalId = null;
+      this._$onTick = function () {
+        return _this._onTick();
+      };
+      this._init(options);
+    }
+
+    inherit(AnonymousStream, Stream, {
+      _init: function () {},
+      _free: function () {},
+      _onTick: function () {},
+      _onActivation: function () {
+        this._intervalId = setInterval(this._$onTick, this._wait);
+      },
+      _onDeactivation: function () {
+        if (this._intervalId !== null) {
+          clearInterval(this._intervalId);
+          this._intervalId = null;
+        }
+      },
+      _clear: function () {
+        Stream.prototype._clear.call(this);
+        this._$onTick = null;
+        this._free();
+      }
+    }, mixin);
+
+    return AnonymousStream;
+  }
+
+  var S = timeBased({
+
+    _name: 'later',
+
+    _init: function (_ref) {
+      var x = _ref.x;
+
+      this._x = x;
+    },
+    _free: function () {
+      this._x = null;
+    },
+    _onTick: function () {
+      this._emitValue(this._x);
+      this._emitEnd();
+    }
+  });
+
+  function later(wait, x) {
+    return new S(wait, { x: x });
+  }
+
+  var S$1 = timeBased({
+
+    _name: 'interval',
+
+    _init: function (_ref) {
+      var x = _ref.x;
+
+      this._x = x;
+    },
+    _free: function () {
+      this._x = null;
+    },
+    _onTick: function () {
+      this._emitValue(this._x);
+    }
+  });
+
+  function interval(wait, x) {
+    return new S$1(wait, { x: x });
+  }
+
+  var S$2 = timeBased({
+
+    _name: 'sequentially',
+
+    _init: function (_ref) {
+      var xs = _ref.xs;
+
+      this._xs = cloneArray(xs);
+    },
+    _free: function () {
+      this._xs = null;
+    },
+    _onTick: function () {
+      if (this._xs.length === 1) {
+        this._emitValue(this._xs[0]);
+        this._emitEnd();
+      } else {
+        this._emitValue(this._xs.shift());
+      }
+    }
+  });
+
+  function sequentially(wait, xs) {
+    return xs.length === 0 ? never() : new S$2(wait, { xs: xs });
+  }
+
+  var S$3 = timeBased({
+
+    _name: 'fromPoll',
+
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _onTick: function () {
+      var fn = this._fn;
+      this._emitValue(fn());
+    }
+  });
+
+  function fromPoll(wait, fn) {
+    return new S$3(wait, { fn: fn });
+  }
+
+  function emitter(obs) {
+
+    function value(x) {
+      obs._emitValue(x);
+      return obs._active;
+    }
+
+    function error(x) {
+      obs._emitError(x);
+      return obs._active;
+    }
+
+    function end() {
+      obs._emitEnd();
+      return obs._active;
+    }
+
+    function event(e) {
+      obs._emit(e.type, e.value);
+      return obs._active;
+    }
+
+    return { value: value, error: error, end: end, event: event, emit: value, emitEvent: event };
+  }
+
+  var S$4 = timeBased({
+
+    _name: 'withInterval',
+
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+      this._emitter = emitter(this);
+    },
+    _free: function () {
+      this._fn = null;
+      this._emitter = null;
+    },
+    _onTick: function () {
+      var fn = this._fn;
+      fn(this._emitter);
+    }
+  });
+
+  function withInterval(wait, fn) {
+    return new S$4(wait, { fn: fn });
+  }
+
+  function S$5(fn) {
+    Stream.call(this);
+    this._fn = fn;
+    this._unsubscribe = null;
+  }
+
+  inherit(S$5, Stream, {
+
+    _name: 'stream',
+
+    _onActivation: function () {
+      var fn = this._fn;
+      var unsubscribe = fn(emitter(this));
+      this._unsubscribe = typeof unsubscribe === 'function' ? unsubscribe : null;
+
+      // fix https://github.com/rpominov/kefir/issues/35
+      if (!this._active) {
+        this._callUnsubscribe();
+      }
+    },
+    _callUnsubscribe: function () {
+      if (this._unsubscribe !== null) {
+        this._unsubscribe();
+        this._unsubscribe = null;
+      }
+    },
+    _onDeactivation: function () {
+      this._callUnsubscribe();
+    },
+    _clear: function () {
+      Stream.prototype._clear.call(this);
+      this._fn = null;
+    }
+  });
+
+  function stream(fn) {
+    return new S$5(fn);
+  }
+
+  function fromCallback(callbackConsumer) {
+
+    var called = false;
+
+    return stream(function (emitter) {
+
+      if (!called) {
+        callbackConsumer(function (x) {
+          emitter.emit(x);
+          emitter.end();
+        });
+        called = true;
+      }
+    }).setName('fromCallback');
+  }
+
+  function fromNodeCallback(callbackConsumer) {
+
+    var called = false;
+
+    return stream(function (emitter) {
+
+      if (!called) {
+        callbackConsumer(function (error, x) {
+          if (error) {
+            emitter.error(error);
+          } else {
+            emitter.emit(x);
+          }
+          emitter.end();
+        });
+        called = true;
+      }
+    }).setName('fromNodeCallback');
+  }
+
+  function spread(fn, length) {
+    switch (length) {
+      case 0:
+        return function () {
+          return fn();
+        };
+      case 1:
+        return function (a) {
+          return fn(a[0]);
+        };
+      case 2:
+        return function (a) {
+          return fn(a[0], a[1]);
+        };
+      case 3:
+        return function (a) {
+          return fn(a[0], a[1], a[2]);
+        };
+      case 4:
+        return function (a) {
+          return fn(a[0], a[1], a[2], a[3]);
+        };
+      default:
+        return function (a) {
+          return fn.apply(null, a);
+        };
+    }
+  }
+
+  function apply(fn, c, a) {
+    var aLength = a ? a.length : 0;
+    if (c == null) {
+      switch (aLength) {
+        case 0:
+          return fn();
+        case 1:
+          return fn(a[0]);
+        case 2:
+          return fn(a[0], a[1]);
+        case 3:
+          return fn(a[0], a[1], a[2]);
+        case 4:
+          return fn(a[0], a[1], a[2], a[3]);
+        default:
+          return fn.apply(null, a);
+      }
+    } else {
+      switch (aLength) {
+        case 0:
+          return fn.call(c);
+        default:
+          return fn.apply(c, a);
+      }
+    }
+  }
+
+  function fromSubUnsub(sub, unsub, transformer /* Function | falsey */) {
+    return stream(function (emitter) {
+
+      var handler = transformer ? function () {
+        emitter.emit(apply(transformer, this, arguments));
+      } : function (x) {
+        emitter.emit(x);
+      };
+
+      sub(handler);
+      return function () {
+        return unsub(handler);
+      };
+    }).setName('fromSubUnsub');
+  }
+
+  var pairs = [['addEventListener', 'removeEventListener'], ['addListener', 'removeListener'], ['on', 'off']];
+
+  function fromEvents(target, eventName, transformer) {
+    var sub = undefined,
+        unsub = undefined;
+
+    for (var i = 0; i < pairs.length; i++) {
+      if (typeof target[pairs[i][0]] === 'function' && typeof target[pairs[i][1]] === 'function') {
+        sub = pairs[i][0];
+        unsub = pairs[i][1];
+        break;
+      }
+    }
+
+    if (sub === undefined) {
+      throw new Error('target don\'t support any of ' + 'addEventListener/removeEventListener, addListener/removeListener, on/off method pair');
+    }
+
+    return fromSubUnsub(function (handler) {
+      return target[sub](eventName, handler);
+    }, function (handler) {
+      return target[unsub](eventName, handler);
+    }, transformer).setName('fromEvents');
+  }
+
+  // HACK:
+  //   We don't call parent Class constructor, but instead putting all necessary
+  //   properties into prototype to simulate ended Property
+  //   (see Propperty and Observable classes).
+
+  function P(value) {
+    this._currentEvent = { type: 'value', value: value, current: true };
+  }
+
+  inherit(P, Property, {
+    _name: 'constant',
+    _active: false,
+    _activating: false,
+    _alive: false,
+    _dispatcher: null,
+    _logHandlers: null
+  });
+
+  function constant(x) {
+    return new P(x);
+  }
+
+  // HACK:
+  //   We don't call parent Class constructor, but instead putting all necessary
+  //   properties into prototype to simulate ended Property
+  //   (see Propperty and Observable classes).
+
+  function P$1(value) {
+    this._currentEvent = { type: 'error', value: value, current: true };
+  }
+
+  inherit(P$1, Property, {
+    _name: 'constantError',
+    _active: false,
+    _activating: false,
+    _alive: false,
+    _dispatcher: null,
+    _logHandlers: null
+  });
+
+  function constantError(x) {
+    return new P$1(x);
+  }
+
+  function createConstructor(BaseClass, name) {
+    return function AnonymousObservable(source, options) {
+      var _this = this;
+
+      BaseClass.call(this);
+      this._source = source;
+      this._name = source._name + '.' + name;
+      this._init(options);
+      this._$handleAny = function (event) {
+        return _this._handleAny(event);
+      };
+    };
+  }
+
+  function createClassMethods(BaseClass) {
+    return {
+      _init: function () {},
+      _free: function () {},
+      _handleValue: function (x) {
+        this._emitValue(x);
+      },
+      _handleError: function (x) {
+        this._emitError(x);
+      },
+      _handleEnd: function () {
+        this._emitEnd();
+      },
+      _handleAny: function (event) {
+        switch (event.type) {
+          case VALUE:
+            return this._handleValue(event.value);
+          case ERROR:
+            return this._handleError(event.value);
+          case END:
+            return this._handleEnd();
+        }
+      },
+      _onActivation: function () {
+        this._source.onAny(this._$handleAny);
+      },
+      _onDeactivation: function () {
+        this._source.offAny(this._$handleAny);
+      },
+      _clear: function () {
+        BaseClass.prototype._clear.call(this);
+        this._source = null;
+        this._$handleAny = null;
+        this._free();
+      }
+    };
+  }
+
+  function createStream(name, mixin) {
+    var S = createConstructor(Stream, name);
+    inherit(S, Stream, createClassMethods(Stream), mixin);
+    return S;
+  }
+
+  function createProperty(name, mixin) {
+    var P = createConstructor(Property, name);
+    inherit(P, Property, createClassMethods(Property), mixin);
+    return P;
+  }
+
+  var P$2 = createProperty('toProperty', {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._getInitialCurrent = fn;
+    },
+    _onActivation: function () {
+      if (this._getInitialCurrent !== null) {
+        var getInitial = this._getInitialCurrent;
+        this._emitValue(getInitial());
+      }
+      this._source.onAny(this._$handleAny); // copied from patterns/one-source
+    }
+  });
+
+  function toProperty(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? null : arguments[1];
+
+    if (fn !== null && typeof fn !== 'function') {
+      throw new Error('You should call toProperty() with a function or no arguments.');
+    }
+    return new P$2(obs, { fn: fn });
+  }
+
+  var S$6 = createStream('changes', {
+    _handleValue: function (x) {
+      if (!this._activating) {
+        this._emitValue(x);
+      }
+    },
+    _handleError: function (x) {
+      if (!this._activating) {
+        this._emitError(x);
+      }
+    }
+  });
+
+  function changes(obs) {
+    return new S$6(obs);
+  }
+
+  function fromPromise(promise) {
+
+    var called = false;
+
+    var result = stream(function (emitter) {
+      if (!called) {
+        var onValue = function (x) {
+          emitter.emit(x);
+          emitter.end();
+        };
+        var onError = function (x) {
+          emitter.error(x);
+          emitter.end();
+        };
+        var _promise = promise.then(onValue, onError);
+
+        // prevent libraries like 'Q' or 'when' from swallowing exceptions
+        if (_promise && typeof _promise.done === 'function') {
+          _promise.done();
+        }
+
+        called = true;
+      }
+    });
+
+    return toProperty(result, null).setName('fromPromise');
+  }
+
+  function getGlodalPromise() {
+    if (typeof Promise === 'function') {
+      return Promise;
+    } else {
+      throw new Error('There isn\'t default Promise, use shim or parameter');
+    }
+  }
+
+  function toPromise (obs) {
+    var Promise = arguments.length <= 1 || arguments[1] === undefined ? getGlodalPromise() : arguments[1];
+
+    var last = null;
+    return new Promise(function (resolve, reject) {
+      obs.onAny(function (event) {
+        if (event.type === END && last !== null) {
+          (last.type === VALUE ? resolve : reject)(last.value);
+          last = null;
+        } else {
+          last = event;
+        }
+      });
+    });
+  }
+
+  function symbol_ (key) {
+    if (typeof Symbol !== 'undefined' && Symbol[key]) {
+      return Symbol[key];
+    } else if (typeof Symbol !== 'undefined' && typeof Symbol.for === 'function') {
+      return Symbol.for(key);
+    } else {
+      return '@@' + key;
+    }
+  }
+
+  var symbol = symbol_('observable');
+
+  function fromESObservable(_observable) {
+    var observable = _observable[symbol] ? _observable[symbol]() : _observable;
+    return stream(function (emitter) {
+      var unsub = observable.subscribe({
+        error: function (error) {
+          emitter.error(error);
+          emitter.end();
+        },
+        next: function (value) {
+          emitter.emit(value);
+        },
+        complete: function () {
+          emitter.end();
+        }
+      });
+
+      if (unsub.unsubscribe) {
+        return function () {
+          unsub.unsubscribe();
+        };
+      } else {
+        return unsub;
+      }
+    }).setName('fromESObservable');
+  }
+
+  function ESObservable(observable) {
+    this._observable = observable.takeErrors(1);
+  }
+
+  extend(ESObservable.prototype, {
+    subscribe: function (observer) {
+      var _this = this;
+
+      var fn = function (event) {
+        if (event.type === VALUE && observer.next) {
+          observer.next(event.value);
+        } else if (event.type === ERROR && observer.error) {
+          observer.error(event.value);
+        } else if (event.type === END && observer.complete) {
+          observer.complete(event.value);
+        }
+      };
+
+      this._observable.onAny(fn);
+      return function () {
+        return _this._observable.offAny(fn);
+      };
+    }
+  });
+
+  function toESObservable() {
+    return new ESObservable(this);
+  }
+
+  var mixin = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleValue: function (x) {
+      var fn = this._fn;
+      this._emitValue(fn(x));
+    }
+  };
+
+  var S$7 = createStream('map', mixin);
+  var P$3 = createProperty('map', mixin);
+
+  var id = function (x) {
+    return x;
+  };
+
+  function map$1(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? id : arguments[1];
+
+    return new (obs._ofSameType(S$7, P$3))(obs, { fn: fn });
+  }
+
+  var mixin$1 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleValue: function (x) {
+      var fn = this._fn;
+      if (fn(x)) {
+        this._emitValue(x);
+      }
+    }
+  };
+
+  var S$8 = createStream('filter', mixin$1);
+  var P$4 = createProperty('filter', mixin$1);
+
+  var id$1 = function (x) {
+    return x;
+  };
+
+  function filter(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? id$1 : arguments[1];
+
+    return new (obs._ofSameType(S$8, P$4))(obs, { fn: fn });
+  }
+
+  var mixin$2 = {
+    _init: function (_ref) {
+      var n = _ref.n;
+
+      this._n = n;
+      if (n <= 0) {
+        this._emitEnd();
+      }
+    },
+    _handleValue: function (x) {
+      this._n--;
+      this._emitValue(x);
+      if (this._n === 0) {
+        this._emitEnd();
+      }
+    }
+  };
+
+  var S$9 = createStream('take', mixin$2);
+  var P$5 = createProperty('take', mixin$2);
+
+  function take(obs, n) {
+    return new (obs._ofSameType(S$9, P$5))(obs, { n: n });
+  }
+
+  var mixin$3 = {
+    _init: function (_ref) {
+      var n = _ref.n;
+
+      this._n = n;
+      if (n <= 0) {
+        this._emitEnd();
+      }
+    },
+    _handleError: function (x) {
+      this._n--;
+      this._emitError(x);
+      if (this._n === 0) {
+        this._emitEnd();
+      }
+    }
+  };
+
+  var S$10 = createStream('takeErrors', mixin$3);
+  var P$6 = createProperty('takeErrors', mixin$3);
+
+  function takeErrors(obs, n) {
+    return new (obs._ofSameType(S$10, P$6))(obs, { n: n });
+  }
+
+  var mixin$4 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleValue: function (x) {
+      var fn = this._fn;
+      if (fn(x)) {
+        this._emitValue(x);
+      } else {
+        this._emitEnd();
+      }
+    }
+  };
+
+  var S$11 = createStream('takeWhile', mixin$4);
+  var P$7 = createProperty('takeWhile', mixin$4);
+
+  var id$2 = function (x) {
+    return x;
+  };
+
+  function takeWhile(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? id$2 : arguments[1];
+
+    return new (obs._ofSameType(S$11, P$7))(obs, { fn: fn });
+  }
+
+  var mixin$5 = {
+    _init: function () {
+      this._lastValue = NOTHING;
+    },
+    _free: function () {
+      this._lastValue = null;
+    },
+    _handleValue: function (x) {
+      this._lastValue = x;
+    },
+    _handleEnd: function () {
+      if (this._lastValue !== NOTHING) {
+        this._emitValue(this._lastValue);
+      }
+      this._emitEnd();
+    }
+  };
+
+  var S$12 = createStream('last', mixin$5);
+  var P$8 = createProperty('last', mixin$5);
+
+  function last(obs) {
+    return new (obs._ofSameType(S$12, P$8))(obs);
+  }
+
+  var mixin$6 = {
+    _init: function (_ref) {
+      var n = _ref.n;
+
+      this._n = Math.max(0, n);
+    },
+    _handleValue: function (x) {
+      if (this._n === 0) {
+        this._emitValue(x);
+      } else {
+        this._n--;
+      }
+    }
+  };
+
+  var S$13 = createStream('skip', mixin$6);
+  var P$9 = createProperty('skip', mixin$6);
+
+  function skip(obs, n) {
+    return new (obs._ofSameType(S$13, P$9))(obs, { n: n });
+  }
+
+  var mixin$7 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleValue: function (x) {
+      var fn = this._fn;
+      if (this._fn !== null && !fn(x)) {
+        this._fn = null;
+      }
+      if (this._fn === null) {
+        this._emitValue(x);
+      }
+    }
+  };
+
+  var S$14 = createStream('skipWhile', mixin$7);
+  var P$10 = createProperty('skipWhile', mixin$7);
+
+  var id$3 = function (x) {
+    return x;
+  };
+
+  function skipWhile(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? id$3 : arguments[1];
+
+    return new (obs._ofSameType(S$14, P$10))(obs, { fn: fn });
+  }
+
+  var mixin$8 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+      this._prev = NOTHING;
+    },
+    _free: function () {
+      this._fn = null;
+      this._prev = null;
+    },
+    _handleValue: function (x) {
+      var fn = this._fn;
+      if (this._prev === NOTHING || !fn(this._prev, x)) {
+        this._prev = x;
+        this._emitValue(x);
+      }
+    }
+  };
+
+  var S$15 = createStream('skipDuplicates', mixin$8);
+  var P$11 = createProperty('skipDuplicates', mixin$8);
+
+  var eq = function (a, b) {
+    return a === b;
+  };
+
+  function skipDuplicates(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? eq : arguments[1];
+
+    return new (obs._ofSameType(S$15, P$11))(obs, { fn: fn });
+  }
+
+  var mixin$9 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+      var seed = _ref.seed;
+
+      this._fn = fn;
+      this._prev = seed;
+    },
+    _free: function () {
+      this._prev = null;
+      this._fn = null;
+    },
+    _handleValue: function (x) {
+      if (this._prev !== NOTHING) {
+        var fn = this._fn;
+        this._emitValue(fn(this._prev, x));
+      }
+      this._prev = x;
+    }
+  };
+
+  var S$16 = createStream('diff', mixin$9);
+  var P$12 = createProperty('diff', mixin$9);
+
+  function defaultFn(a, b) {
+    return [a, b];
+  }
+
+  function diff(obs, fn) {
+    var seed = arguments.length <= 2 || arguments[2] === undefined ? NOTHING : arguments[2];
+
+    return new (obs._ofSameType(S$16, P$12))(obs, { fn: fn || defaultFn, seed: seed });
+  }
+
+  var P$13 = createProperty('scan', {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+      var seed = _ref.seed;
+
+      this._fn = fn;
+      this._seed = seed;
+      if (seed !== NOTHING) {
+        this._emitValue(seed);
+      }
+    },
+    _free: function () {
+      this._fn = null;
+      this._seed = null;
+    },
+    _handleValue: function (x) {
+      var fn = this._fn;
+      if (this._currentEvent === null || this._currentEvent.type === ERROR) {
+        this._emitValue(this._seed === NOTHING ? x : fn(this._seed, x));
+      } else {
+        this._emitValue(fn(this._currentEvent.value, x));
+      }
+    }
+  });
+
+  function scan(obs, fn) {
+    var seed = arguments.length <= 2 || arguments[2] === undefined ? NOTHING : arguments[2];
+
+    return new P$13(obs, { fn: fn, seed: seed });
+  }
+
+  var mixin$10 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleValue: function (x) {
+      var fn = this._fn;
+      var xs = fn(x);
+      for (var i = 0; i < xs.length; i++) {
+        this._emitValue(xs[i]);
+      }
+    }
+  };
+
+  var S$17 = createStream('flatten', mixin$10);
+
+  var id$4 = function (x) {
+    return x;
+  };
+
+  function flatten(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? id$4 : arguments[1];
+
+    return new S$17(obs, { fn: fn });
+  }
+
+  var END_MARKER = {};
+
+  var mixin$11 = {
+    _init: function (_ref) {
+      var _this = this;
+
+      var wait = _ref.wait;
+
+      this._wait = Math.max(0, wait);
+      this._buff = [];
+      this._$shiftBuff = function () {
+        var value = _this._buff.shift();
+        if (value === END_MARKER) {
+          _this._emitEnd();
+        } else {
+          _this._emitValue(value);
+        }
+      };
+    },
+    _free: function () {
+      this._buff = null;
+      this._$shiftBuff = null;
+    },
+    _handleValue: function (x) {
+      if (this._activating) {
+        this._emitValue(x);
+      } else {
+        this._buff.push(x);
+        setTimeout(this._$shiftBuff, this._wait);
+      }
+    },
+    _handleEnd: function () {
+      if (this._activating) {
+        this._emitEnd();
+      } else {
+        this._buff.push(END_MARKER);
+        setTimeout(this._$shiftBuff, this._wait);
+      }
+    }
+  };
+
+  var S$18 = createStream('delay', mixin$11);
+  var P$14 = createProperty('delay', mixin$11);
+
+  function delay(obs, wait) {
+    return new (obs._ofSameType(S$18, P$14))(obs, { wait: wait });
+  }
+
+  var now = Date.now ? function () {
+    return Date.now();
+  } : function () {
+    return new Date().getTime();
+  };
+
+  var mixin$12 = {
+    _init: function (_ref) {
+      var _this = this;
+
+      var wait = _ref.wait;
+      var leading = _ref.leading;
+      var trailing = _ref.trailing;
+
+      this._wait = Math.max(0, wait);
+      this._leading = leading;
+      this._trailing = trailing;
+      this._trailingValue = null;
+      this._timeoutId = null;
+      this._endLater = false;
+      this._lastCallTime = 0;
+      this._$trailingCall = function () {
+        return _this._trailingCall();
+      };
+    },
+    _free: function () {
+      this._trailingValue = null;
+      this._$trailingCall = null;
+    },
+    _handleValue: function (x) {
+      if (this._activating) {
+        this._emitValue(x);
+      } else {
+        var curTime = now();
+        if (this._lastCallTime === 0 && !this._leading) {
+          this._lastCallTime = curTime;
+        }
+        var remaining = this._wait - (curTime - this._lastCallTime);
+        if (remaining <= 0) {
+          this._cancelTrailing();
+          this._lastCallTime = curTime;
+          this._emitValue(x);
+        } else if (this._trailing) {
+          this._cancelTrailing();
+          this._trailingValue = x;
+          this._timeoutId = setTimeout(this._$trailingCall, remaining);
+        }
+      }
+    },
+    _handleEnd: function () {
+      if (this._activating) {
+        this._emitEnd();
+      } else {
+        if (this._timeoutId) {
+          this._endLater = true;
+        } else {
+          this._emitEnd();
+        }
+      }
+    },
+    _cancelTrailing: function () {
+      if (this._timeoutId !== null) {
+        clearTimeout(this._timeoutId);
+        this._timeoutId = null;
+      }
+    },
+    _trailingCall: function () {
+      this._emitValue(this._trailingValue);
+      this._timeoutId = null;
+      this._trailingValue = null;
+      this._lastCallTime = !this._leading ? 0 : now();
+      if (this._endLater) {
+        this._emitEnd();
+      }
+    }
+  };
+
+  var S$19 = createStream('throttle', mixin$12);
+  var P$15 = createProperty('throttle', mixin$12);
+
+  function throttle(obs, wait) {
+    var _ref2 = arguments.length <= 2 || arguments[2] === undefined ? {} : arguments[2];
+
+    var _ref2$leading = _ref2.leading;
+    var leading = _ref2$leading === undefined ? true : _ref2$leading;
+    var _ref2$trailing = _ref2.trailing;
+    var trailing = _ref2$trailing === undefined ? true : _ref2$trailing;
+
+    return new (obs._ofSameType(S$19, P$15))(obs, { wait: wait, leading: leading, trailing: trailing });
+  }
+
+  var mixin$13 = {
+    _init: function (_ref) {
+      var _this = this;
+
+      var wait = _ref.wait;
+      var immediate = _ref.immediate;
+
+      this._wait = Math.max(0, wait);
+      this._immediate = immediate;
+      this._lastAttempt = 0;
+      this._timeoutId = null;
+      this._laterValue = null;
+      this._endLater = false;
+      this._$later = function () {
+        return _this._later();
+      };
+    },
+    _free: function () {
+      this._laterValue = null;
+      this._$later = null;
+    },
+    _handleValue: function (x) {
+      if (this._activating) {
+        this._emitValue(x);
+      } else {
+        this._lastAttempt = now();
+        if (this._immediate && !this._timeoutId) {
+          this._emitValue(x);
+        }
+        if (!this._timeoutId) {
+          this._timeoutId = setTimeout(this._$later, this._wait);
+        }
+        if (!this._immediate) {
+          this._laterValue = x;
+        }
+      }
+    },
+    _handleEnd: function () {
+      if (this._activating) {
+        this._emitEnd();
+      } else {
+        if (this._timeoutId && !this._immediate) {
+          this._endLater = true;
+        } else {
+          this._emitEnd();
+        }
+      }
+    },
+    _later: function () {
+      var last = now() - this._lastAttempt;
+      if (last < this._wait && last >= 0) {
+        this._timeoutId = setTimeout(this._$later, this._wait - last);
+      } else {
+        this._timeoutId = null;
+        if (!this._immediate) {
+          this._emitValue(this._laterValue);
+          this._laterValue = null;
+        }
+        if (this._endLater) {
+          this._emitEnd();
+        }
+      }
+    }
+  };
+
+  var S$20 = createStream('debounce', mixin$13);
+  var P$16 = createProperty('debounce', mixin$13);
+
+  function debounce(obs, wait) {
+    var _ref2 = arguments.length <= 2 || arguments[2] === undefined ? {} : arguments[2];
+
+    var _ref2$immediate = _ref2.immediate;
+    var immediate = _ref2$immediate === undefined ? false : _ref2$immediate;
+
+    return new (obs._ofSameType(S$20, P$16))(obs, { wait: wait, immediate: immediate });
+  }
+
+  var mixin$14 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleError: function (x) {
+      var fn = this._fn;
+      this._emitError(fn(x));
+    }
+  };
+
+  var S$21 = createStream('mapErrors', mixin$14);
+  var P$17 = createProperty('mapErrors', mixin$14);
+
+  var id$5 = function (x) {
+    return x;
+  };
+
+  function mapErrors(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? id$5 : arguments[1];
+
+    return new (obs._ofSameType(S$21, P$17))(obs, { fn: fn });
+  }
+
+  var mixin$15 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleError: function (x) {
+      var fn = this._fn;
+      if (fn(x)) {
+        this._emitError(x);
+      }
+    }
+  };
+
+  var S$22 = createStream('filterErrors', mixin$15);
+  var P$18 = createProperty('filterErrors', mixin$15);
+
+  var id$6 = function (x) {
+    return x;
+  };
+
+  function filterErrors(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? id$6 : arguments[1];
+
+    return new (obs._ofSameType(S$22, P$18))(obs, { fn: fn });
+  }
+
+  var mixin$16 = {
+    _handleValue: function () {}
+  };
+
+  var S$23 = createStream('ignoreValues', mixin$16);
+  var P$19 = createProperty('ignoreValues', mixin$16);
+
+  function ignoreValues(obs) {
+    return new (obs._ofSameType(S$23, P$19))(obs);
+  }
+
+  var mixin$17 = {
+    _handleError: function () {}
+  };
+
+  var S$24 = createStream('ignoreErrors', mixin$17);
+  var P$20 = createProperty('ignoreErrors', mixin$17);
+
+  function ignoreErrors(obs) {
+    return new (obs._ofSameType(S$24, P$20))(obs);
+  }
+
+  var mixin$18 = {
+    _handleEnd: function () {}
+  };
+
+  var S$25 = createStream('ignoreEnd', mixin$18);
+  var P$21 = createProperty('ignoreEnd', mixin$18);
+
+  function ignoreEnd(obs) {
+    return new (obs._ofSameType(S$25, P$21))(obs);
+  }
+
+  var mixin$19 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleEnd: function () {
+      var fn = this._fn;
+      this._emitValue(fn());
+      this._emitEnd();
+    }
+  };
+
+  var S$26 = createStream('beforeEnd', mixin$19);
+  var P$22 = createProperty('beforeEnd', mixin$19);
+
+  function beforeEnd(obs, fn) {
+    return new (obs._ofSameType(S$26, P$22))(obs, { fn: fn });
+  }
+
+  var mixin$20 = {
+    _init: function (_ref) {
+      var min = _ref.min;
+      var max = _ref.max;
+
+      this._max = max;
+      this._min = min;
+      this._buff = [];
+    },
+    _free: function () {
+      this._buff = null;
+    },
+    _handleValue: function (x) {
+      this._buff = slide(this._buff, x, this._max);
+      if (this._buff.length >= this._min) {
+        this._emitValue(this._buff);
+      }
+    }
+  };
+
+  var S$27 = createStream('slidingWindow', mixin$20);
+  var P$23 = createProperty('slidingWindow', mixin$20);
+
+  function slidingWindow(obs, max) {
+    var min = arguments.length <= 2 || arguments[2] === undefined ? 0 : arguments[2];
+
+    return new (obs._ofSameType(S$27, P$23))(obs, { min: min, max: max });
+  }
+
+  var mixin$21 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+      var flushOnEnd = _ref.flushOnEnd;
+
+      this._fn = fn;
+      this._flushOnEnd = flushOnEnd;
+      this._buff = [];
+    },
+    _free: function () {
+      this._buff = null;
+    },
+    _flush: function () {
+      if (this._buff !== null && this._buff.length !== 0) {
+        this._emitValue(this._buff);
+        this._buff = [];
+      }
+    },
+    _handleValue: function (x) {
+      this._buff.push(x);
+      var fn = this._fn;
+      if (!fn(x)) {
+        this._flush();
+      }
+    },
+    _handleEnd: function () {
+      if (this._flushOnEnd) {
+        this._flush();
+      }
+      this._emitEnd();
+    }
+  };
+
+  var S$28 = createStream('bufferWhile', mixin$21);
+  var P$24 = createProperty('bufferWhile', mixin$21);
+
+  var id$7 = function (x) {
+    return x;
+  };
+
+  function bufferWhile(obs, fn) {
+    var _ref2 = arguments.length <= 2 || arguments[2] === undefined ? {} : arguments[2];
+
+    var _ref2$flushOnEnd = _ref2.flushOnEnd;
+    var flushOnEnd = _ref2$flushOnEnd === undefined ? true : _ref2$flushOnEnd;
+
+    return new (obs._ofSameType(S$28, P$24))(obs, { fn: fn || id$7, flushOnEnd: flushOnEnd });
+  }
+
+  var mixin$22 = {
+    _init: function (_ref) {
+      var count = _ref.count;
+      var flushOnEnd = _ref.flushOnEnd;
+
+      this._count = count;
+      this._flushOnEnd = flushOnEnd;
+      this._buff = [];
+    },
+    _free: function () {
+      this._buff = null;
+    },
+    _flush: function () {
+      if (this._buff !== null && this._buff.length !== 0) {
+        this._emitValue(this._buff);
+        this._buff = [];
+      }
+    },
+    _handleValue: function (x) {
+      this._buff.push(x);
+      if (this._buff.length >= this._count) {
+        this._flush();
+      }
+    },
+    _handleEnd: function () {
+      if (this._flushOnEnd) {
+        this._flush();
+      }
+      this._emitEnd();
+    }
+  };
+
+  var S$29 = createStream('bufferWithCount', mixin$22);
+  var P$25 = createProperty('bufferWithCount', mixin$22);
+
+  function bufferWhile$1(obs, count) {
+    var _ref2 = arguments.length <= 2 || arguments[2] === undefined ? {} : arguments[2];
+
+    var _ref2$flushOnEnd = _ref2.flushOnEnd;
+    var flushOnEnd = _ref2$flushOnEnd === undefined ? true : _ref2$flushOnEnd;
+
+    return new (obs._ofSameType(S$29, P$25))(obs, { count: count, flushOnEnd: flushOnEnd });
+  }
+
+  var mixin$23 = {
+    _init: function (_ref) {
+      var _this = this;
+
+      var wait = _ref.wait;
+      var count = _ref.count;
+      var flushOnEnd = _ref.flushOnEnd;
+
+      this._wait = wait;
+      this._count = count;
+      this._flushOnEnd = flushOnEnd;
+      this._intervalId = null;
+      this._$onTick = function () {
+        return _this._flush();
+      };
+      this._buff = [];
+    },
+    _free: function () {
+      this._$onTick = null;
+      this._buff = null;
+    },
+    _flush: function () {
+      if (this._buff !== null) {
+        this._emitValue(this._buff);
+        this._buff = [];
+      }
+    },
+    _handleValue: function (x) {
+      this._buff.push(x);
+      if (this._buff.length >= this._count) {
+        clearInterval(this._intervalId);
+        this._flush();
+        this._intervalId = setInterval(this._$onTick, this._wait);
+      }
+    },
+    _handleEnd: function () {
+      if (this._flushOnEnd && this._buff.length !== 0) {
+        this._flush();
+      }
+      this._emitEnd();
+    },
+    _onActivation: function () {
+      this._source.onAny(this._$handleAny); // copied from patterns/one-source
+      this._intervalId = setInterval(this._$onTick, this._wait);
+    },
+    _onDeactivation: function () {
+      if (this._intervalId !== null) {
+        clearInterval(this._intervalId);
+        this._intervalId = null;
+      }
+      this._source.offAny(this._$handleAny); // copied from patterns/one-source
+    }
+  };
+
+  var S$30 = createStream('bufferWithTimeOrCount', mixin$23);
+  var P$26 = createProperty('bufferWithTimeOrCount', mixin$23);
+
+  function bufferWithTimeOrCount(obs, wait, count) {
+    var _ref2 = arguments.length <= 3 || arguments[3] === undefined ? {} : arguments[3];
+
+    var _ref2$flushOnEnd = _ref2.flushOnEnd;
+    var flushOnEnd = _ref2$flushOnEnd === undefined ? true : _ref2$flushOnEnd;
+
+    return new (obs._ofSameType(S$30, P$26))(obs, { wait: wait, count: count, flushOnEnd: flushOnEnd });
+  }
+
+  function xformForObs(obs) {
+    return {
+      '@@transducer/step': function (res, input) {
+        obs._emitValue(input);
+        return null;
+      },
+      '@@transducer/result': function () {
+        obs._emitEnd();
+        return null;
+      }
+    };
+  }
+
+  var mixin$24 = {
+    _init: function (_ref) {
+      var transducer = _ref.transducer;
+
+      this._xform = transducer(xformForObs(this));
+    },
+    _free: function () {
+      this._xform = null;
+    },
+    _handleValue: function (x) {
+      if (this._xform['@@transducer/step'](null, x) !== null) {
+        this._xform['@@transducer/result'](null);
+      }
+    },
+    _handleEnd: function () {
+      this._xform['@@transducer/result'](null);
+    }
+  };
+
+  var S$31 = createStream('transduce', mixin$24);
+  var P$27 = createProperty('transduce', mixin$24);
+
+  function transduce(obs, transducer) {
+    return new (obs._ofSameType(S$31, P$27))(obs, { transducer: transducer });
+  }
+
+  var mixin$25 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._handler = fn;
+      this._emitter = emitter(this);
+    },
+    _free: function () {
+      this._handler = null;
+      this._emitter = null;
+    },
+    _handleAny: function (event) {
+      this._handler(this._emitter, event);
+    }
+  };
+
+  var S$32 = createStream('withHandler', mixin$25);
+  var P$28 = createProperty('withHandler', mixin$25);
+
+  function withHandler(obs, fn) {
+    return new (obs._ofSameType(S$32, P$28))(obs, { fn: fn });
+  }
+
+  function defaultErrorsCombinator(errors) {
+    var latestError = undefined;
+    for (var i = 0; i < errors.length; i++) {
+      if (errors[i] !== undefined) {
+        if (latestError === undefined || latestError.index < errors[i].index) {
+          latestError = errors[i];
+        }
+      }
+    }
+    return latestError.error;
+  }
+
+  function Combine(active, passive, combinator) {
+    var _this = this;
+
+    Stream.call(this);
+    this._activeCount = active.length;
+    this._sources = concat(active, passive);
+    this._combinator = combinator ? spread(combinator, this._sources.length) : function (x) {
+      return x;
+    };
+    this._aliveCount = 0;
+    this._latestValues = new Array(this._sources.length);
+    this._latestErrors = new Array(this._sources.length);
+    fillArray(this._latestValues, NOTHING);
+    this._emitAfterActivation = false;
+    this._endAfterActivation = false;
+    this._latestErrorIndex = 0;
+
+    this._$handlers = [];
+
+    var _loop = function (i) {
+      _this._$handlers.push(function (event) {
+        return _this._handleAny(i, event);
+      });
+    };
+
+    for (var i = 0; i < this._sources.length; i++) {
+      _loop(i);
+    }
+  }
+
+  inherit(Combine, Stream, {
+
+    _name: 'combine',
+
+    _onActivation: function () {
+      this._aliveCount = this._activeCount;
+
+      // we need to suscribe to _passive_ sources before _active_
+      // (see https://github.com/rpominov/kefir/issues/98)
+      for (var i = this._activeCount; i < this._sources.length; i++) {
+        this._sources[i].onAny(this._$handlers[i]);
+      }
+      for (var i = 0; i < this._activeCount; i++) {
+        this._sources[i].onAny(this._$handlers[i]);
+      }
+
+      if (this._emitAfterActivation) {
+        this._emitAfterActivation = false;
+        this._emitIfFull();
+      }
+      if (this._endAfterActivation) {
+        this._emitEnd();
+      }
+    },
+    _onDeactivation: function () {
+      var length = this._sources.length,
+          i = undefined;
+      for (i = 0; i < length; i++) {
+        this._sources[i].offAny(this._$handlers[i]);
+      }
+    },
+    _emitIfFull: function () {
+      var hasAllValues = true;
+      var hasErrors = false;
+      var length = this._latestValues.length;
+      var valuesCopy = new Array(length);
+      var errorsCopy = new Array(length);
+
+      for (var i = 0; i < length; i++) {
+        valuesCopy[i] = this._latestValues[i];
+        errorsCopy[i] = this._latestErrors[i];
+
+        if (valuesCopy[i] === NOTHING) {
+          hasAllValues = false;
+        }
+
+        if (errorsCopy[i] !== undefined) {
+          hasErrors = true;
+        }
+      }
+
+      if (hasAllValues) {
+        var combinator = this._combinator;
+        this._emitValue(combinator(valuesCopy));
+      }
+      if (hasErrors) {
+        this._emitError(defaultErrorsCombinator(errorsCopy));
+      }
+    },
+    _handleAny: function (i, event) {
+
+      if (event.type === VALUE || event.type === ERROR) {
+
+        if (event.type === VALUE) {
+          this._latestValues[i] = event.value;
+          this._latestErrors[i] = undefined;
+        }
+        if (event.type === ERROR) {
+          this._latestValues[i] = NOTHING;
+          this._latestErrors[i] = {
+            index: this._latestErrorIndex++,
+            error: event.value
+          };
+        }
+
+        if (i < this._activeCount) {
+          if (this._activating) {
+            this._emitAfterActivation = true;
+          } else {
+            this._emitIfFull();
+          }
+        }
+      } else {
+        // END
+
+        if (i < this._activeCount) {
+          this._aliveCount--;
+          if (this._aliveCount === 0) {
+            if (this._activating) {
+              this._endAfterActivation = true;
+            } else {
+              this._emitEnd();
+            }
+          }
+        }
+      }
+    },
+    _clear: function () {
+      Stream.prototype._clear.call(this);
+      this._sources = null;
+      this._latestValues = null;
+      this._latestErrors = null;
+      this._combinator = null;
+      this._$handlers = null;
+    }
+  });
+
+  function combine(active) {
+    var passive = arguments.length <= 1 || arguments[1] === undefined ? [] : arguments[1];
+    var combinator = arguments[2];
+
+    if (typeof passive === 'function') {
+      combinator = passive;
+      passive = [];
+    }
+    return active.length === 0 ? never() : new Combine(active, passive, combinator);
+  }
+
+  var isArray = Array.isArray || function (xs) {
+    return Object.prototype.toString.call(xs) === '[object Array]';
+  };
+
+  function Zip(sources, combinator) {
+    var _this = this;
+
+    Stream.call(this);
+
+    this._buffers = map(sources, function (source) {
+      return isArray(source) ? cloneArray(source) : [];
+    });
+    this._sources = map(sources, function (source) {
+      return isArray(source) ? never() : source;
+    });
+
+    this._combinator = combinator ? spread(combinator, this._sources.length) : function (x) {
+      return x;
+    };
+    this._aliveCount = 0;
+
+    this._$handlers = [];
+
+    var _loop = function (i) {
+      _this._$handlers.push(function (event) {
+        return _this._handleAny(i, event);
+      });
+    };
+
+    for (var i = 0; i < this._sources.length; i++) {
+      _loop(i);
+    }
+  }
+
+  inherit(Zip, Stream, {
+
+    _name: 'zip',
+
+    _onActivation: function () {
+
+      // if all sources are arrays
+      while (this._isFull()) {
+        this._emit();
+      }
+
+      var length = this._sources.length;
+      this._aliveCount = length;
+      for (var i = 0; i < length && this._active; i++) {
+        this._sources[i].onAny(this._$handlers[i]);
+      }
+    },
+    _onDeactivation: function () {
+      for (var i = 0; i < this._sources.length; i++) {
+        this._sources[i].offAny(this._$handlers[i]);
+      }
+    },
+    _emit: function () {
+      var values = new Array(this._buffers.length);
+      for (var i = 0; i < this._buffers.length; i++) {
+        values[i] = this._buffers[i].shift();
+      }
+      var combinator = this._combinator;
+      this._emitValue(combinator(values));
+    },
+    _isFull: function () {
+      for (var i = 0; i < this._buffers.length; i++) {
+        if (this._buffers[i].length === 0) {
+          return false;
+        }
+      }
+      return true;
+    },
+    _handleAny: function (i, event) {
+      if (event.type === VALUE) {
+        this._buffers[i].push(event.value);
+        if (this._isFull()) {
+          this._emit();
+        }
+      }
+      if (event.type === ERROR) {
+        this._emitError(event.value);
+      }
+      if (event.type === END) {
+        this._aliveCount--;
+        if (this._aliveCount === 0) {
+          this._emitEnd();
+        }
+      }
+    },
+    _clear: function () {
+      Stream.prototype._clear.call(this);
+      this._sources = null;
+      this._buffers = null;
+      this._combinator = null;
+      this._$handlers = null;
+    }
+  });
+
+  function zip(observables, combinator /* Function | falsey */) {
+    return observables.length === 0 ? never() : new Zip(observables, combinator);
+  }
+
+  var id$8 = function (x) {
+    return x;
+  };
+
+  function AbstractPool() {
+    var _this = this;
+
+    var _ref = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
+
+    var _ref$queueLim = _ref.queueLim;
+    var queueLim = _ref$queueLim === undefined ? 0 : _ref$queueLim;
+    var _ref$concurLim = _ref.concurLim;
+    var concurLim = _ref$concurLim === undefined ? -1 : _ref$concurLim;
+    var _ref$drop = _ref.drop;
+    var drop = _ref$drop === undefined ? 'new' : _ref$drop;
+
+    Stream.call(this);
+
+    this._queueLim = queueLim < 0 ? -1 : queueLim;
+    this._concurLim = concurLim < 0 ? -1 : concurLim;
+    this._drop = drop;
+    this._queue = [];
+    this._curSources = [];
+    this._$handleSubAny = function (event) {
+      return _this._handleSubAny(event);
+    };
+    this._$endHandlers = [];
+    this._currentlyAdding = null;
+
+    if (this._concurLim === 0) {
+      this._emitEnd();
+    }
+  }
+
+  inherit(AbstractPool, Stream, {
+
+    _name: 'abstractPool',
+
+    _add: function (obj, toObs /* Function | falsey */) {
+      toObs = toObs || id$8;
+      if (this._concurLim === -1 || this._curSources.length < this._concurLim) {
+        this._addToCur(toObs(obj));
+      } else {
+        if (this._queueLim === -1 || this._queue.length < this._queueLim) {
+          this._addToQueue(toObs(obj));
+        } else if (this._drop === 'old') {
+          this._removeOldest();
+          this._add(obj, toObs);
+        }
+      }
+    },
+    _addAll: function (obss) {
+      var _this2 = this;
+
+      forEach(obss, function (obs) {
+        return _this2._add(obs);
+      });
+    },
+    _remove: function (obs) {
+      if (this._removeCur(obs) === -1) {
+        this._removeQueue(obs);
+      }
+    },
+    _addToQueue: function (obs) {
+      this._queue = concat(this._queue, [obs]);
+    },
+    _addToCur: function (obs) {
+      if (this._active) {
+
+        // HACK:
+        //
+        // We have two optimizations for cases when `obs` is ended. We don't want
+        // to add such observable to the list, but only want to emit events
+        // from it (if it has some).
+        //
+        // Instead of this hacks, we could just did following,
+        // but it would be 5-8 times slower:
+        //
+        //     this._curSources = concat(this._curSources, [obs]);
+        //     this._subscribe(obs);
+        //
+
+        // #1
+        // This one for cases when `obs` already ended
+        // e.g., Kefir.constant() or Kefir.never()
+        if (!obs._alive) {
+          if (obs._currentEvent) {
+            this._emit(obs._currentEvent.type, obs._currentEvent.value);
+          }
+          return;
+        }
+
+        // #2
+        // This one is for cases when `obs` going to end synchronously on
+        // first subscriber e.g., Kefir.stream(em => {em.emit(1); em.end()})
+        this._currentlyAdding = obs;
+        obs.onAny(this._$handleSubAny);
+        this._currentlyAdding = null;
+        if (obs._alive) {
+          this._curSources = concat(this._curSources, [obs]);
+          if (this._active) {
+            this._subToEnd(obs);
+          }
+        }
+      } else {
+        this._curSources = concat(this._curSources, [obs]);
+      }
+    },
+    _subToEnd: function (obs) {
+      var _this3 = this;
+
+      var onEnd = function () {
+        return _this3._removeCur(obs);
+      };
+      this._$endHandlers.push({ obs: obs, handler: onEnd });
+      obs.onEnd(onEnd);
+    },
+    _subscribe: function (obs) {
+      obs.onAny(this._$handleSubAny);
+
+      // it can become inactive in responce of subscribing to `obs.onAny` above
+      if (this._active) {
+        this._subToEnd(obs);
+      }
+    },
+    _unsubscribe: function (obs) {
+      obs.offAny(this._$handleSubAny);
+
+      var onEndI = findByPred(this._$endHandlers, function (obj) {
+        return obj.obs === obs;
+      });
+      if (onEndI !== -1) {
+        obs.offEnd(this._$endHandlers[onEndI].handler);
+        this._$endHandlers.splice(onEndI, 1);
+      }
+    },
+    _handleSubAny: function (event) {
+      if (event.type === VALUE) {
+        this._emitValue(event.value);
+      } else if (event.type === ERROR) {
+        this._emitError(event.value);
+      }
+    },
+    _removeQueue: function (obs) {
+      var index = find(this._queue, obs);
+      this._queue = remove(this._queue, index);
+      return index;
+    },
+    _removeCur: function (obs) {
+      if (this._active) {
+        this._unsubscribe(obs);
+      }
+      var index = find(this._curSources, obs);
+      this._curSources = remove(this._curSources, index);
+      if (index !== -1) {
+        if (this._queue.length !== 0) {
+          this._pullQueue();
+        } else if (this._curSources.length === 0) {
+          this._onEmpty();
+        }
+      }
+      return index;
+    },
+    _removeOldest: function () {
+      this._removeCur(this._curSources[0]);
+    },
+    _pullQueue: function () {
+      if (this._queue.length !== 0) {
+        this._queue = cloneArray(this._queue);
+        this._addToCur(this._queue.shift());
+      }
+    },
+    _onActivation: function () {
+      for (var i = 0, sources = this._curSources; i < sources.length && this._active; i++) {
+        this._subscribe(sources[i]);
+      }
+    },
+    _onDeactivation: function () {
+      for (var i = 0, sources = this._curSources; i < sources.length; i++) {
+        this._unsubscribe(sources[i]);
+      }
+      if (this._currentlyAdding !== null) {
+        this._unsubscribe(this._currentlyAdding);
+      }
+    },
+    _isEmpty: function () {
+      return this._curSources.length === 0;
+    },
+    _onEmpty: function () {},
+    _clear: function () {
+      Stream.prototype._clear.call(this);
+      this._queue = null;
+      this._curSources = null;
+      this._$handleSubAny = null;
+      this._$endHandlers = null;
+    }
+  });
+
+  function Merge(sources) {
+    AbstractPool.call(this);
+    this._addAll(sources);
+    this._initialised = true;
+  }
+
+  inherit(Merge, AbstractPool, {
+
+    _name: 'merge',
+
+    _onEmpty: function () {
+      if (this._initialised) {
+        this._emitEnd();
+      }
+    }
+  });
+
+  function merge(observables) {
+    return observables.length === 0 ? never() : new Merge(observables);
+  }
+
+  function S$33(generator) {
+    var _this = this;
+
+    Stream.call(this);
+    this._generator = generator;
+    this._source = null;
+    this._inLoop = false;
+    this._iteration = 0;
+    this._$handleAny = function (event) {
+      return _this._handleAny(event);
+    };
+  }
+
+  inherit(S$33, Stream, {
+
+    _name: 'repeat',
+
+    _handleAny: function (event) {
+      if (event.type === END) {
+        this._source = null;
+        this._getSource();
+      } else {
+        this._emit(event.type, event.value);
+      }
+    },
+    _getSource: function () {
+      if (!this._inLoop) {
+        this._inLoop = true;
+        var generator = this._generator;
+        while (this._source === null && this._alive && this._active) {
+          this._source = generator(this._iteration++);
+          if (this._source) {
+            this._source.onAny(this._$handleAny);
+          } else {
+            this._emitEnd();
+          }
+        }
+        this._inLoop = false;
+      }
+    },
+    _onActivation: function () {
+      if (this._source) {
+        this._source.onAny(this._$handleAny);
+      } else {
+        this._getSource();
+      }
+    },
+    _onDeactivation: function () {
+      if (this._source) {
+        this._source.offAny(this._$handleAny);
+      }
+    },
+    _clear: function () {
+      Stream.prototype._clear.call(this);
+      this._generator = null;
+      this._source = null;
+      this._$handleAny = null;
+    }
+  });
+
+  function repeat (generator) {
+    return new S$33(generator);
+  }
+
+  function concat$1(observables) {
+    return repeat(function (index) {
+      return observables.length > index ? observables[index] : false;
+    }).setName('concat');
+  }
+
+  function Pool() {
+    AbstractPool.call(this);
+  }
+
+  inherit(Pool, AbstractPool, {
+
+    _name: 'pool',
+
+    plug: function (obs) {
+      this._add(obs);
+      return this;
+    },
+    unplug: function (obs) {
+      this._remove(obs);
+      return this;
+    }
+  });
+
+  function FlatMap(source, fn, options) {
+    var _this = this;
+
+    AbstractPool.call(this, options);
+    this._source = source;
+    this._fn = fn;
+    this._mainEnded = false;
+    this._lastCurrent = null;
+    this._$handleMain = function (event) {
+      return _this._handleMain(event);
+    };
+  }
+
+  inherit(FlatMap, AbstractPool, {
+    _onActivation: function () {
+      AbstractPool.prototype._onActivation.call(this);
+      if (this._active) {
+        this._source.onAny(this._$handleMain);
+      }
+    },
+    _onDeactivation: function () {
+      AbstractPool.prototype._onDeactivation.call(this);
+      this._source.offAny(this._$handleMain);
+      this._hadNoEvSinceDeact = true;
+    },
+    _handleMain: function (event) {
+
+      if (event.type === VALUE) {
+        // Is latest value before deactivation survived, and now is 'current' on this activation?
+        // We don't want to handle such values, to prevent to constantly add
+        // same observale on each activation/deactivation when our main source
+        // is a `Kefir.conatant()` for example.
+        var sameCurr = this._activating && this._hadNoEvSinceDeact && this._lastCurrent === event.value;
+        if (!sameCurr) {
+          this._add(event.value, this._fn);
+        }
+        this._lastCurrent = event.value;
+        this._hadNoEvSinceDeact = false;
+      }
+
+      if (event.type === ERROR) {
+        this._emitError(event.value);
+      }
+
+      if (event.type === END) {
+        if (this._isEmpty()) {
+          this._emitEnd();
+        } else {
+          this._mainEnded = true;
+        }
+      }
+    },
+    _onEmpty: function () {
+      if (this._mainEnded) {
+        this._emitEnd();
+      }
+    },
+    _clear: function () {
+      AbstractPool.prototype._clear.call(this);
+      this._source = null;
+      this._lastCurrent = null;
+      this._$handleMain = null;
+    }
+  });
+
+  function FlatMapErrors(source, fn) {
+    FlatMap.call(this, source, fn);
+  }
+
+  inherit(FlatMapErrors, FlatMap, {
+
+    // Same as in FlatMap, only VALUE/ERROR flipped
+
+    _handleMain: function (event) {
+
+      if (event.type === ERROR) {
+        var sameCurr = this._activating && this._hadNoEvSinceDeact && this._lastCurrent === event.value;
+        if (!sameCurr) {
+          this._add(event.value, this._fn);
+        }
+        this._lastCurrent = event.value;
+        this._hadNoEvSinceDeact = false;
+      }
+
+      if (event.type === VALUE) {
+        this._emitValue(event.value);
+      }
+
+      if (event.type === END) {
+        if (this._isEmpty()) {
+          this._emitEnd();
+        } else {
+          this._mainEnded = true;
+        }
+      }
+    }
+  });
+
+  function createConstructor$1(BaseClass, name) {
+    return function AnonymousObservable(primary, secondary, options) {
+      var _this = this;
+
+      BaseClass.call(this);
+      this._primary = primary;
+      this._secondary = secondary;
+      this._name = primary._name + '.' + name;
+      this._lastSecondary = NOTHING;
+      this._$handleSecondaryAny = function (event) {
+        return _this._handleSecondaryAny(event);
+      };
+      this._$handlePrimaryAny = function (event) {
+        return _this._handlePrimaryAny(event);
+      };
+      this._init(options);
+    };
+  }
+
+  function createClassMethods$1(BaseClass) {
+    return {
+      _init: function () {},
+      _free: function () {},
+      _handlePrimaryValue: function (x) {
+        this._emitValue(x);
+      },
+      _handlePrimaryError: function (x) {
+        this._emitError(x);
+      },
+      _handlePrimaryEnd: function () {
+        this._emitEnd();
+      },
+      _handleSecondaryValue: function (x) {
+        this._lastSecondary = x;
+      },
+      _handleSecondaryError: function (x) {
+        this._emitError(x);
+      },
+      _handleSecondaryEnd: function () {},
+      _handlePrimaryAny: function (event) {
+        switch (event.type) {
+          case VALUE:
+            return this._handlePrimaryValue(event.value);
+          case ERROR:
+            return this._handlePrimaryError(event.value);
+          case END:
+            return this._handlePrimaryEnd(event.value);
+        }
+      },
+      _handleSecondaryAny: function (event) {
+        switch (event.type) {
+          case VALUE:
+            return this._handleSecondaryValue(event.value);
+          case ERROR:
+            return this._handleSecondaryError(event.value);
+          case END:
+            this._handleSecondaryEnd(event.value);
+            this._removeSecondary();
+        }
+      },
+      _removeSecondary: function () {
+        if (this._secondary !== null) {
+          this._secondary.offAny(this._$handleSecondaryAny);
+          this._$handleSecondaryAny = null;
+          this._secondary = null;
+        }
+      },
+      _onActivation: function () {
+        if (this._secondary !== null) {
+          this._secondary.onAny(this._$handleSecondaryAny);
+        }
+        if (this._active) {
+          this._primary.onAny(this._$handlePrimaryAny);
+        }
+      },
+      _onDeactivation: function () {
+        if (this._secondary !== null) {
+          this._secondary.offAny(this._$handleSecondaryAny);
+        }
+        this._primary.offAny(this._$handlePrimaryAny);
+      },
+      _clear: function () {
+        BaseClass.prototype._clear.call(this);
+        this._primary = null;
+        this._secondary = null;
+        this._lastSecondary = null;
+        this._$handleSecondaryAny = null;
+        this._$handlePrimaryAny = null;
+        this._free();
+      }
+    };
+  }
+
+  function createStream$1(name, mixin) {
+    var S = createConstructor$1(Stream, name);
+    inherit(S, Stream, createClassMethods$1(Stream), mixin);
+    return S;
+  }
+
+  function createProperty$1(name, mixin) {
+    var P = createConstructor$1(Property, name);
+    inherit(P, Property, createClassMethods$1(Property), mixin);
+    return P;
+  }
+
+  var mixin$26 = {
+    _handlePrimaryValue: function (x) {
+      if (this._lastSecondary !== NOTHING && this._lastSecondary) {
+        this._emitValue(x);
+      }
+    },
+    _handleSecondaryEnd: function () {
+      if (this._lastSecondary === NOTHING || !this._lastSecondary) {
+        this._emitEnd();
+      }
+    }
+  };
+
+  var S$34 = createStream$1('filterBy', mixin$26);
+  var P$29 = createProperty$1('filterBy', mixin$26);
+
+  function filterBy(primary, secondary) {
+    return new (primary._ofSameType(S$34, P$29))(primary, secondary);
+  }
+
+  var id2 = function (_, x) {
+    return x;
+  };
+
+  function sampledBy(passive, active, combinator) {
+    var _combinator = combinator ? function (a, b) {
+      return combinator(b, a);
+    } : id2;
+    return combine([active], [passive], _combinator).setName(passive, 'sampledBy');
+  }
+
+  var mixin$27 = {
+    _handlePrimaryValue: function (x) {
+      if (this._lastSecondary !== NOTHING) {
+        this._emitValue(x);
+      }
+    },
+    _handleSecondaryEnd: function () {
+      if (this._lastSecondary === NOTHING) {
+        this._emitEnd();
+      }
+    }
+  };
+
+  var S$35 = createStream$1('skipUntilBy', mixin$27);
+  var P$30 = createProperty$1('skipUntilBy', mixin$27);
+
+  function skipUntilBy(primary, secondary) {
+    return new (primary._ofSameType(S$35, P$30))(primary, secondary);
+  }
+
+  var mixin$28 = {
+    _handleSecondaryValue: function () {
+      this._emitEnd();
+    }
+  };
+
+  var S$36 = createStream$1('takeUntilBy', mixin$28);
+  var P$31 = createProperty$1('takeUntilBy', mixin$28);
+
+  function takeUntilBy(primary, secondary) {
+    return new (primary._ofSameType(S$36, P$31))(primary, secondary);
+  }
+
+  var mixin$29 = {
+    _init: function () {
+      var _ref = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
+
+      var _ref$flushOnEnd = _ref.flushOnEnd;
+      var flushOnEnd = _ref$flushOnEnd === undefined ? true : _ref$flushOnEnd;
+
+      this._buff = [];
+      this._flushOnEnd = flushOnEnd;
+    },
+    _free: function () {
+      this._buff = null;
+    },
+    _flush: function () {
+      if (this._buff !== null) {
+        this._emitValue(this._buff);
+        this._buff = [];
+      }
+    },
+    _handlePrimaryEnd: function () {
+      if (this._flushOnEnd) {
+        this._flush();
+      }
+      this._emitEnd();
+    },
+    _onActivation: function () {
+      this._primary.onAny(this._$handlePrimaryAny);
+      if (this._alive && this._secondary !== null) {
+        this._secondary.onAny(this._$handleSecondaryAny);
+      }
+    },
+    _handlePrimaryValue: function (x) {
+      this._buff.push(x);
+    },
+    _handleSecondaryValue: function () {
+      this._flush();
+    },
+    _handleSecondaryEnd: function () {
+      if (!this._flushOnEnd) {
+        this._emitEnd();
+      }
+    }
+  };
+
+  var S$37 = createStream$1('bufferBy', mixin$29);
+  var P$32 = createProperty$1('bufferBy', mixin$29);
+
+  function bufferBy(primary, secondary, options /* optional */) {
+    return new (primary._ofSameType(S$37, P$32))(primary, secondary, options);
+  }
+
+  var mixin$30 = {
+    _init: function () {
+      var _ref = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
+
+      var _ref$flushOnEnd = _ref.flushOnEnd;
+      var flushOnEnd = _ref$flushOnEnd === undefined ? true : _ref$flushOnEnd;
+      var _ref$flushOnChange = _ref.flushOnChange;
+      var flushOnChange = _ref$flushOnChange === undefined ? false : _ref$flushOnChange;
+
+      this._buff = [];
+      this._flushOnEnd = flushOnEnd;
+      this._flushOnChange = flushOnChange;
+    },
+    _free: function () {
+      this._buff = null;
+    },
+    _flush: function () {
+      if (this._buff !== null) {
+        this._emitValue(this._buff);
+        this._buff = [];
+      }
+    },
+    _handlePrimaryEnd: function () {
+      if (this._flushOnEnd) {
+        this._flush();
+      }
+      this._emitEnd();
+    },
+    _handlePrimaryValue: function (x) {
+      this._buff.push(x);
+      if (this._lastSecondary !== NOTHING && !this._lastSecondary) {
+        this._flush();
+      }
+    },
+    _handleSecondaryEnd: function () {
+      if (!this._flushOnEnd && (this._lastSecondary === NOTHING || this._lastSecondary)) {
+        this._emitEnd();
+      }
+    },
+    _handleSecondaryValue: function (x) {
+      if (this._flushOnChange && !x) {
+        this._flush();
+      }
+
+      // from default _handleSecondaryValue
+      this._lastSecondary = x;
+    }
+  };
+
+  var S$38 = createStream$1('bufferWhileBy', mixin$30);
+  var P$33 = createProperty$1('bufferWhileBy', mixin$30);
+
+  function bufferWhileBy(primary, secondary, options /* optional */) {
+    return new (primary._ofSameType(S$38, P$33))(primary, secondary, options);
+  }
+
+  var f = function () {
+    return false;
+  };
+  var t = function () {
+    return true;
+  };
+
+  function awaiting(a, b) {
+    var result = merge([map$1(a, t), map$1(b, f)]);
+    result = skipDuplicates(result);
+    result = toProperty(result, f);
+    return result.setName(a, 'awaiting');
+  }
+
+  var mixin$31 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleValue: function (x) {
+      var fn = this._fn;
+      var result = fn(x);
+      if (result.convert) {
+        this._emitError(result.error);
+      } else {
+        this._emitValue(x);
+      }
+    }
+  };
+
+  var S$39 = createStream('valuesToErrors', mixin$31);
+  var P$34 = createProperty('valuesToErrors', mixin$31);
+
+  var defFn = function (x) {
+    return { convert: true, error: x };
+  };
+
+  function valuesToErrors(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? defFn : arguments[1];
+
+    return new (obs._ofSameType(S$39, P$34))(obs, { fn: fn });
+  }
+
+  var mixin$32 = {
+    _init: function (_ref) {
+      var fn = _ref.fn;
+
+      this._fn = fn;
+    },
+    _free: function () {
+      this._fn = null;
+    },
+    _handleError: function (x) {
+      var fn = this._fn;
+      var result = fn(x);
+      if (result.convert) {
+        this._emitValue(result.value);
+      } else {
+        this._emitError(x);
+      }
+    }
+  };
+
+  var S$40 = createStream('errorsToValues', mixin$32);
+  var P$35 = createProperty('errorsToValues', mixin$32);
+
+  var defFn$1 = function (x) {
+    return { convert: true, value: x };
+  };
+
+  function errorsToValues(obs) {
+    var fn = arguments.length <= 1 || arguments[1] === undefined ? defFn$1 : arguments[1];
+
+    return new (obs._ofSameType(S$40, P$35))(obs, { fn: fn });
+  }
+
+  var mixin$33 = {
+    _handleError: function (x) {
+      this._emitError(x);
+      this._emitEnd();
+    }
+  };
+
+  var S$41 = createStream('endOnError', mixin$33);
+  var P$36 = createProperty('endOnError', mixin$33);
+
+  function endOnError(obs) {
+    return new (obs._ofSameType(S$41, P$36))(obs);
+  }
+
+  Observable.prototype.toProperty = function (fn) {
+    return toProperty(this, fn);
+  };
+
+  Observable.prototype.changes = function () {
+    return changes(this);
+  };
+
+  Observable.prototype.toPromise = function (Promise) {
+    return toPromise(this, Promise);
+  };
+
+  Observable.prototype.toESObservable = toESObservable;
+  Observable.prototype[symbol_('observable')] = toESObservable;
+
+  Observable.prototype.map = function (fn) {
+    return map$1(this, fn);
+  };
+
+  Observable.prototype.filter = function (fn) {
+    return filter(this, fn);
+  };
+
+  Observable.prototype.take = function (n) {
+    return take(this, n);
+  };
+
+  Observable.prototype.takeErrors = function (n) {
+    return takeErrors(this, n);
+  };
+
+  Observable.prototype.takeWhile = function (fn) {
+    return takeWhile(this, fn);
+  };
+
+  Observable.prototype.last = function () {
+    return last(this);
+  };
+
+  Observable.prototype.skip = function (n) {
+    return skip(this, n);
+  };
+
+  Observable.prototype.skipWhile = function (fn) {
+    return skipWhile(this, fn);
+  };
+
+  Observable.prototype.skipDuplicates = function (fn) {
+    return skipDuplicates(this, fn);
+  };
+
+  Observable.prototype.diff = function (fn, seed) {
+    return diff(this, fn, seed);
+  };
+
+  Observable.prototype.scan = function (fn, seed) {
+    return scan(this, fn, seed);
+  };
+
+  Observable.prototype.flatten = function (fn) {
+    return flatten(this, fn);
+  };
+
+  Observable.prototype.delay = function (wait) {
+    return delay(this, wait);
+  };
+
+  Observable.prototype.throttle = function (wait, options) {
+    return throttle(this, wait, options);
+  };
+
+  Observable.prototype.debounce = function (wait, options) {
+    return debounce(this, wait, options);
+  };
+
+  Observable.prototype.mapErrors = function (fn) {
+    return mapErrors(this, fn);
+  };
+
+  Observable.prototype.filterErrors = function (fn) {
+    return filterErrors(this, fn);
+  };
+
+  Observable.prototype.ignoreValues = function () {
+    return ignoreValues(this);
+  };
+
+  Observable.prototype.ignoreErrors = function () {
+    return ignoreErrors(this);
+  };
+
+  Observable.prototype.ignoreEnd = function () {
+    return ignoreEnd(this);
+  };
+
+  Observable.prototype.beforeEnd = function (fn) {
+    return beforeEnd(this, fn);
+  };
+
+  Observable.prototype.slidingWindow = function (max, min) {
+    return slidingWindow(this, max, min);
+  };
+
+  Observable.prototype.bufferWhile = function (fn, options) {
+    return bufferWhile(this, fn, options);
+  };
+
+  Observable.prototype.bufferWithCount = function (count, options) {
+    return bufferWhile$1(this, count, options);
+  };
+
+  Observable.prototype.bufferWithTimeOrCount = function (wait, count, options) {
+    return bufferWithTimeOrCount(this, wait, count, options);
+  };
+
+  Observable.prototype.transduce = function (transducer) {
+    return transduce(this, transducer);
+  };
+
+  Observable.prototype.withHandler = function (fn) {
+    return withHandler(this, fn);
+  };
+
+  Observable.prototype.combine = function (other, combinator) {
+    return combine([this, other], combinator);
+  };
+
+  Observable.prototype.zip = function (other, combinator) {
+    return zip([this, other], combinator);
+  };
+
+  Observable.prototype.merge = function (other) {
+    return merge([this, other]);
+  };
+
+  Observable.prototype.concat = function (other) {
+    return concat$1([this, other]);
+  };
+
+  var pool = function () {
+    return new Pool();
+  };
+
+  Observable.prototype.flatMap = function (fn) {
+    return new FlatMap(this, fn).setName(this, 'flatMap');
+  };
+  Observable.prototype.flatMapLatest = function (fn) {
+    return new FlatMap(this, fn, { concurLim: 1, drop: 'old' }).setName(this, 'flatMapLatest');
+  };
+  Observable.prototype.flatMapFirst = function (fn) {
+    return new FlatMap(this, fn, { concurLim: 1 }).setName(this, 'flatMapFirst');
+  };
+  Observable.prototype.flatMapConcat = function (fn) {
+    return new FlatMap(this, fn, { queueLim: -1, concurLim: 1 }).setName(this, 'flatMapConcat');
+  };
+  Observable.prototype.flatMapConcurLimit = function (fn, limit) {
+    return new FlatMap(this, fn, { queueLim: -1, concurLim: limit }).setName(this, 'flatMapConcurLimit');
+  };
+
+  Observable.prototype.flatMapErrors = function (fn) {
+    return new FlatMapErrors(this, fn).setName(this, 'flatMapErrors');
+  };
+
+  Observable.prototype.filterBy = function (other) {
+    return filterBy(this, other);
+  };
+
+  Observable.prototype.sampledBy = function (other, combinator) {
+    return sampledBy(this, other, combinator);
+  };
+
+  Observable.prototype.skipUntilBy = function (other) {
+    return skipUntilBy(this, other);
+  };
+
+  Observable.prototype.takeUntilBy = function (other) {
+    return takeUntilBy(this, other);
+  };
+
+  Observable.prototype.bufferBy = function (other, options) {
+    return bufferBy(this, other, options);
+  };
+
+  Observable.prototype.bufferWhileBy = function (other, options) {
+    return bufferWhileBy(this, other, options);
+  };
+
+  // Deprecated
+  // -----------------------------------------------------------------------------
+
+  function warn(msg) {
+    if (Kefir.DEPRECATION_WARNINGS !== false && console && typeof console.warn === 'function') {
+      var msg2 = '\nHere is an Error object for you containing the call stack:';
+      console.warn(msg, msg2, new Error());
+    }
+  }
+
+  Observable.prototype.awaiting = function (other) {
+    warn('You are using deprecated .awaiting() method, see https://github.com/rpominov/kefir/issues/145');
+    return awaiting(this, other);
+  };
+
+  Observable.prototype.valuesToErrors = function (fn) {
+    warn('You are using deprecated .valuesToErrors() method, see https://github.com/rpominov/kefir/issues/149');
+    return valuesToErrors(this, fn);
+  };
+
+  Observable.prototype.errorsToValues = function (fn) {
+    warn('You are using deprecated .errorsToValues() method, see https://github.com/rpominov/kefir/issues/149');
+    return errorsToValues(this, fn);
+  };
+
+  Observable.prototype.endOnError = function () {
+    warn('You are using deprecated .endOnError() method, see https://github.com/rpominov/kefir/issues/150');
+    return endOnError(this);
+  };
+
+  // Exports
+  // --------------------------------------------------------------------------
+
+  var Kefir = { Observable: Observable, Stream: Stream, Property: Property, never: never, later: later, interval: interval, sequentially: sequentially,
+    fromPoll: fromPoll, withInterval: withInterval, fromCallback: fromCallback, fromNodeCallback: fromNodeCallback, fromEvents: fromEvents, stream: stream,
+    constant: constant, constantError: constantError, fromPromise: fromPromise, fromESObservable: fromESObservable, combine: combine, zip: zip, merge: merge,
+    concat: concat$1, Pool: Pool, pool: pool, repeat: repeat };
+
+  Kefir.Kefir = Kefir;
+
+  exports.Kefir = Kefir;
+  exports.Observable = Observable;
+  exports.Stream = Stream;
+  exports.Property = Property;
+  exports.never = never;
+  exports.later = later;
+  exports.interval = interval;
+  exports.sequentially = sequentially;
+  exports.fromPoll = fromPoll;
+  exports.withInterval = withInterval;
+  exports.fromCallback = fromCallback;
+  exports.fromNodeCallback = fromNodeCallback;
+  exports.fromEvents = fromEvents;
+  exports.stream = stream;
+  exports.constant = constant;
+  exports.constantError = constantError;
+  exports.fromPromise = fromPromise;
+  exports.fromESObservable = fromESObservable;
+  exports.combine = combine;
+  exports.zip = zip;
+  exports.merge = merge;
+  exports.concat = concat$1;
+  exports.Pool = Pool;
+  exports.pool = pool;
+  exports.repeat = repeat;
+  exports['default'] = Kefir;
+
+}));
 },{}],35:[function(require,module,exports){
+//! moment.js
+//! version : 2.10.6
+//! authors : Tim Wood, Iskren Chernev, Moment.js contributors
+//! license : MIT
+//! momentjs.com
+
+(function (global, factory) {
+    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
+    typeof define === 'function' && define.amd ? define(factory) :
+    global.moment = factory()
+}(this, function () { 'use strict';
+
+    var hookCallback;
+
+    function utils_hooks__hooks () {
+        return hookCallback.apply(null, arguments);
+    }
+
+    // This is done to register the method called with moment()
+    // without creating circular dependencies.
+    function setHookCallback (callback) {
+        hookCallback = callback;
+    }
+
+    function isArray(input) {
+        return Object.prototype.toString.call(input) === '[object Array]';
+    }
+
+    function isDate(input) {
+        return input instanceof Date || Object.prototype.toString.call(input) === '[object Date]';
+    }
+
+    function map(arr, fn) {
+        var res = [], i;
+        for (i = 0; i < arr.length; ++i) {
+            res.push(fn(arr[i], i));
+        }
+        return res;
+    }
+
+    function hasOwnProp(a, b) {
+        return Object.prototype.hasOwnProperty.call(a, b);
+    }
+
+    function extend(a, b) {
+        for (var i in b) {
+            if (hasOwnProp(b, i)) {
+                a[i] = b[i];
+            }
+        }
+
+        if (hasOwnProp(b, 'toString')) {
+            a.toString = b.toString;
+        }
+
+        if (hasOwnProp(b, 'valueOf')) {
+            a.valueOf = b.valueOf;
+        }
+
+        return a;
+    }
+
+    function create_utc__createUTC (input, format, locale, strict) {
+        return createLocalOrUTC(input, format, locale, strict, true).utc();
+    }
+
+    function defaultParsingFlags() {
+        // We need to deep clone this object.
+        return {
+            empty           : false,
+            unusedTokens    : [],
+            unusedInput     : [],
+            overflow        : -2,
+            charsLeftOver   : 0,
+            nullInput       : false,
+            invalidMonth    : null,
+            invalidFormat   : false,
+            userInvalidated : false,
+            iso             : false
+        };
+    }
+
+    function getParsingFlags(m) {
+        if (m._pf == null) {
+            m._pf = defaultParsingFlags();
+        }
+        return m._pf;
+    }
+
+    function valid__isValid(m) {
+        if (m._isValid == null) {
+            var flags = getParsingFlags(m);
+            m._isValid = !isNaN(m._d.getTime()) &&
+                flags.overflow < 0 &&
+                !flags.empty &&
+                !flags.invalidMonth &&
+                !flags.invalidWeekday &&
+                !flags.nullInput &&
+                !flags.invalidFormat &&
+                !flags.userInvalidated;
+
+            if (m._strict) {
+                m._isValid = m._isValid &&
+                    flags.charsLeftOver === 0 &&
+                    flags.unusedTokens.length === 0 &&
+                    flags.bigHour === undefined;
+            }
+        }
+        return m._isValid;
+    }
+
+    function valid__createInvalid (flags) {
+        var m = create_utc__createUTC(NaN);
+        if (flags != null) {
+            extend(getParsingFlags(m), flags);
+        }
+        else {
+            getParsingFlags(m).userInvalidated = true;
+        }
+
+        return m;
+    }
+
+    var momentProperties = utils_hooks__hooks.momentProperties = [];
+
+    function copyConfig(to, from) {
+        var i, prop, val;
+
+        if (typeof from._isAMomentObject !== 'undefined') {
+            to._isAMomentObject = from._isAMomentObject;
+        }
+        if (typeof from._i !== 'undefined') {
+            to._i = from._i;
+        }
+        if (typeof from._f !== 'undefined') {
+            to._f = from._f;
+        }
+        if (typeof from._l !== 'undefined') {
+            to._l = from._l;
+        }
+        if (typeof from._strict !== 'undefined') {
+            to._strict = from._strict;
+        }
+        if (typeof from._tzm !== 'undefined') {
+            to._tzm = from._tzm;
+        }
+        if (typeof from._isUTC !== 'undefined') {
+            to._isUTC = from._isUTC;
+        }
+        if (typeof from._offset !== 'undefined') {
+            to._offset = from._offset;
+        }
+        if (typeof from._pf !== 'undefined') {
+            to._pf = getParsingFlags(from);
+        }
+        if (typeof from._locale !== 'undefined') {
+            to._locale = from._locale;
+        }
+
+        if (momentProperties.length > 0) {
+            for (i in momentProperties) {
+                prop = momentProperties[i];
+                val = from[prop];
+                if (typeof val !== 'undefined') {
+                    to[prop] = val;
+                }
+            }
+        }
+
+        return to;
+    }
+
+    var updateInProgress = false;
+
+    // Moment prototype object
+    function Moment(config) {
+        copyConfig(this, config);
+        this._d = new Date(config._d != null ? config._d.getTime() : NaN);
+        // Prevent infinite loop in case updateOffset creates new moment
+        // objects.
+        if (updateInProgress === false) {
+            updateInProgress = true;
+            utils_hooks__hooks.updateOffset(this);
+            updateInProgress = false;
+        }
+    }
+
+    function isMoment (obj) {
+        return obj instanceof Moment || (obj != null && obj._isAMomentObject != null);
+    }
+
+    function absFloor (number) {
+        if (number < 0) {
+            return Math.ceil(number);
+        } else {
+            return Math.floor(number);
+        }
+    }
+
+    function toInt(argumentForCoercion) {
+        var coercedNumber = +argumentForCoercion,
+            value = 0;
+
+        if (coercedNumber !== 0 && isFinite(coercedNumber)) {
+            value = absFloor(coercedNumber);
+        }
+
+        return value;
+    }
+
+    function compareArrays(array1, array2, dontConvert) {
+        var len = Math.min(array1.length, array2.length),
+            lengthDiff = Math.abs(array1.length - array2.length),
+            diffs = 0,
+            i;
+        for (i = 0; i < len; i++) {
+            if ((dontConvert && array1[i] !== array2[i]) ||
+                (!dontConvert && toInt(array1[i]) !== toInt(array2[i]))) {
+                diffs++;
+            }
+        }
+        return diffs + lengthDiff;
+    }
+
+    function Locale() {
+    }
+
+    var locales = {};
+    var globalLocale;
+
+    function normalizeLocale(key) {
+        return key ? key.toLowerCase().replace('_', '-') : key;
+    }
+
+    // pick the locale from the array
+    // try ['en-au', 'en-gb'] as 'en-au', 'en-gb', 'en', as in move through the list trying each
+    // substring from most specific to least, but move to the next array item if it's a more specific variant than the current root
+    function chooseLocale(names) {
+        var i = 0, j, next, locale, split;
+
+        while (i < names.length) {
+            split = normalizeLocale(names[i]).split('-');
+            j = split.length;
+            next = normalizeLocale(names[i + 1]);
+            next = next ? next.split('-') : null;
+            while (j > 0) {
+                locale = loadLocale(split.slice(0, j).join('-'));
+                if (locale) {
+                    return locale;
+                }
+                if (next && next.length >= j && compareArrays(split, next, true) >= j - 1) {
+                    //the next array item is better than a shallower substring of this one
+                    break;
+                }
+                j--;
+            }
+            i++;
+        }
+        return null;
+    }
+
+    function loadLocale(name) {
+        var oldLocale = null;
+        // TODO: Find a better way to register and load all the locales in Node
+        if (!locales[name] && typeof module !== 'undefined' &&
+                module && module.exports) {
+            try {
+                oldLocale = globalLocale._abbr;
+                require('./locale/' + name);
+                // because defineLocale currently also sets the global locale, we
+                // want to undo that for lazy loaded locales
+                locale_locales__getSetGlobalLocale(oldLocale);
+            } catch (e) { }
+        }
+        return locales[name];
+    }
+
+    // This function will load locale and then set the global locale.  If
+    // no arguments are passed in, it will simply return the current global
+    // locale key.
+    function locale_locales__getSetGlobalLocale (key, values) {
+        var data;
+        if (key) {
+            if (typeof values === 'undefined') {
+                data = locale_locales__getLocale(key);
+            }
+            else {
+                data = defineLocale(key, values);
+            }
+
+            if (data) {
+                // moment.duration._locale = moment._locale = data;
+                globalLocale = data;
+            }
+        }
+
+        return globalLocale._abbr;
+    }
+
+    function defineLocale (name, values) {
+        if (values !== null) {
+            values.abbr = name;
+            locales[name] = locales[name] || new Locale();
+            locales[name].set(values);
+
+            // backwards compat for now: also set the locale
+            locale_locales__getSetGlobalLocale(name);
+
+            return locales[name];
+        } else {
+            // useful for testing
+            delete locales[name];
+            return null;
+        }
+    }
+
+    // returns locale data
+    function locale_locales__getLocale (key) {
+        var locale;
+
+        if (key && key._locale && key._locale._abbr) {
+            key = key._locale._abbr;
+        }
+
+        if (!key) {
+            return globalLocale;
+        }
+
+        if (!isArray(key)) {
+            //short-circuit everything else
+            locale = loadLocale(key);
+            if (locale) {
+                return locale;
+            }
+            key = [key];
+        }
+
+        return chooseLocale(key);
+    }
+
+    var aliases = {};
+
+    function addUnitAlias (unit, shorthand) {
+        var lowerCase = unit.toLowerCase();
+        aliases[lowerCase] = aliases[lowerCase + 's'] = aliases[shorthand] = unit;
+    }
+
+    function normalizeUnits(units) {
+        return typeof units === 'string' ? aliases[units] || aliases[units.toLowerCase()] : undefined;
+    }
+
+    function normalizeObjectUnits(inputObject) {
+        var normalizedInput = {},
+            normalizedProp,
+            prop;
+
+        for (prop in inputObject) {
+            if (hasOwnProp(inputObject, prop)) {
+                normalizedProp = normalizeUnits(prop);
+                if (normalizedProp) {
+                    normalizedInput[normalizedProp] = inputObject[prop];
+                }
+            }
+        }
+
+        return normalizedInput;
+    }
+
+    function makeGetSet (unit, keepTime) {
+        return function (value) {
+            if (value != null) {
+                get_set__set(this, unit, value);
+                utils_hooks__hooks.updateOffset(this, keepTime);
+                return this;
+            } else {
+                return get_set__get(this, unit);
+            }
+        };
+    }
+
+    function get_set__get (mom, unit) {
+        return mom._d['get' + (mom._isUTC ? 'UTC' : '') + unit]();
+    }
+
+    function get_set__set (mom, unit, value) {
+        return mom._d['set' + (mom._isUTC ? 'UTC' : '') + unit](value);
+    }
+
+    // MOMENTS
+
+    function getSet (units, value) {
+        var unit;
+        if (typeof units === 'object') {
+            for (unit in units) {
+                this.set(unit, units[unit]);
+            }
+        } else {
+            units = normalizeUnits(units);
+            if (typeof this[units] === 'function') {
+                return this[units](value);
+            }
+        }
+        return this;
+    }
+
+    function zeroFill(number, targetLength, forceSign) {
+        var absNumber = '' + Math.abs(number),
+            zerosToFill = targetLength - absNumber.length,
+            sign = number >= 0;
+        return (sign ? (forceSign ? '+' : '') : '-') +
+            Math.pow(10, Math.max(0, zerosToFill)).toString().substr(1) + absNumber;
+    }
+
+    var formattingTokens = /(\[[^\[]*\])|(\\)?(Mo|MM?M?M?|Do|DDDo|DD?D?D?|ddd?d?|do?|w[o|w]?|W[o|W]?|Q|YYYYYY|YYYYY|YYYY|YY|gg(ggg?)?|GG(GGG?)?|e|E|a|A|hh?|HH?|mm?|ss?|S{1,9}|x|X|zz?|ZZ?|.)/g;
+
+    var localFormattingTokens = /(\[[^\[]*\])|(\\)?(LTS|LT|LL?L?L?|l{1,4})/g;
+
+    var formatFunctions = {};
+
+    var formatTokenFunctions = {};
+
+    // token:    'M'
+    // padded:   ['MM', 2]
+    // ordinal:  'Mo'
+    // callback: function () { this.month() + 1 }
+    function addFormatToken (token, padded, ordinal, callback) {
+        var func = callback;
+        if (typeof callback === 'string') {
+            func = function () {
+                return this[callback]();
+            };
+        }
+        if (token) {
+            formatTokenFunctions[token] = func;
+        }
+        if (padded) {
+            formatTokenFunctions[padded[0]] = function () {
+                return zeroFill(func.apply(this, arguments), padded[1], padded[2]);
+            };
+        }
+        if (ordinal) {
+            formatTokenFunctions[ordinal] = function () {
+                return this.localeData().ordinal(func.apply(this, arguments), token);
+            };
+        }
+    }
+
+    function removeFormattingTokens(input) {
+        if (input.match(/\[[\s\S]/)) {
+            return input.replace(/^\[|\]$/g, '');
+        }
+        return input.replace(/\\/g, '');
+    }
+
+    function makeFormatFunction(format) {
+        var array = format.match(formattingTokens), i, length;
+
+        for (i = 0, length = array.length; i < length; i++) {
+            if (formatTokenFunctions[array[i]]) {
+                array[i] = formatTokenFunctions[array[i]];
+            } else {
+                array[i] = removeFormattingTokens(array[i]);
+            }
+        }
+
+        return function (mom) {
+            var output = '';
+            for (i = 0; i < length; i++) {
+                output += array[i] instanceof Function ? array[i].call(mom, format) : array[i];
+            }
+            return output;
+        };
+    }
+
+    // format date using native date object
+    function formatMoment(m, format) {
+        if (!m.isValid()) {
+            return m.localeData().invalidDate();
+        }
+
+        format = expandFormat(format, m.localeData());
+        formatFunctions[format] = formatFunctions[format] || makeFormatFunction(format);
+
+        return formatFunctions[format](m);
+    }
+
+    function expandFormat(format, locale) {
+        var i = 5;
+
+        function replaceLongDateFormatTokens(input) {
+            return locale.longDateFormat(input) || input;
+        }
+
+        localFormattingTokens.lastIndex = 0;
+        while (i >= 0 && localFormattingTokens.test(format)) {
+            format = format.replace(localFormattingTokens, replaceLongDateFormatTokens);
+            localFormattingTokens.lastIndex = 0;
+            i -= 1;
+        }
+
+        return format;
+    }
+
+    var match1         = /\d/;            //       0 - 9
+    var match2         = /\d\d/;          //      00 - 99
+    var match3         = /\d{3}/;         //     000 - 999
+    var match4         = /\d{4}/;         //    0000 - 9999
+    var match6         = /[+-]?\d{6}/;    // -999999 - 999999
+    var match1to2      = /\d\d?/;         //       0 - 99
+    var match1to3      = /\d{1,3}/;       //       0 - 999
+    var match1to4      = /\d{1,4}/;       //       0 - 9999
+    var match1to6      = /[+-]?\d{1,6}/;  // -999999 - 999999
+
+    var matchUnsigned  = /\d+/;           //       0 - inf
+    var matchSigned    = /[+-]?\d+/;      //    -inf - inf
+
+    var matchOffset    = /Z|[+-]\d\d:?\d\d/gi; // +00:00 -00:00 +0000 -0000 or Z
+
+    var matchTimestamp = /[+-]?\d+(\.\d{1,3})?/; // 123456789 123456789.123
+
+    // any word (or two) characters or numbers including two/three word month in arabic.
+    var matchWord = /[0-9]*['a-z\u00A0-\u05FF\u0700-\uD7FF\uF900-\uFDCF\uFDF0-\uFFEF]+|[\u0600-\u06FF\/]+(\s*?[\u0600-\u06FF]+){1,2}/i;
+
+    var regexes = {};
+
+    function isFunction (sth) {
+        // https://github.com/moment/moment/issues/2325
+        return typeof sth === 'function' &&
+            Object.prototype.toString.call(sth) === '[object Function]';
+    }
+
+
+    function addRegexToken (token, regex, strictRegex) {
+        regexes[token] = isFunction(regex) ? regex : function (isStrict) {
+            return (isStrict && strictRegex) ? strictRegex : regex;
+        };
+    }
+
+    function getParseRegexForToken (token, config) {
+        if (!hasOwnProp(regexes, token)) {
+            return new RegExp(unescapeFormat(token));
+        }
+
+        return regexes[token](config._strict, config._locale);
+    }
+
+    // Code from http://stackoverflow.com/questions/3561493/is-there-a-regexp-escape-function-in-javascript
+    function unescapeFormat(s) {
+        return s.replace('\\', '').replace(/\\(\[)|\\(\])|\[([^\]\[]*)\]|\\(.)/g, function (matched, p1, p2, p3, p4) {
+            return p1 || p2 || p3 || p4;
+        }).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    }
+
+    var tokens = {};
+
+    function addParseToken (token, callback) {
+        var i, func = callback;
+        if (typeof token === 'string') {
+            token = [token];
+        }
+        if (typeof callback === 'number') {
+            func = function (input, array) {
+                array[callback] = toInt(input);
+            };
+        }
+        for (i = 0; i < token.length; i++) {
+            tokens[token[i]] = func;
+        }
+    }
+
+    function addWeekParseToken (token, callback) {
+        addParseToken(token, function (input, array, config, token) {
+            config._w = config._w || {};
+            callback(input, config._w, config, token);
+        });
+    }
+
+    function addTimeToArrayFromToken(token, input, config) {
+        if (input != null && hasOwnProp(tokens, token)) {
+            tokens[token](input, config._a, config, token);
+        }
+    }
+
+    var YEAR = 0;
+    var MONTH = 1;
+    var DATE = 2;
+    var HOUR = 3;
+    var MINUTE = 4;
+    var SECOND = 5;
+    var MILLISECOND = 6;
+
+    function daysInMonth(year, month) {
+        return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+    }
+
+    // FORMATTING
+
+    addFormatToken('M', ['MM', 2], 'Mo', function () {
+        return this.month() + 1;
+    });
+
+    addFormatToken('MMM', 0, 0, function (format) {
+        return this.localeData().monthsShort(this, format);
+    });
+
+    addFormatToken('MMMM', 0, 0, function (format) {
+        return this.localeData().months(this, format);
+    });
+
+    // ALIASES
+
+    addUnitAlias('month', 'M');
+
+    // PARSING
+
+    addRegexToken('M',    match1to2);
+    addRegexToken('MM',   match1to2, match2);
+    addRegexToken('MMM',  matchWord);
+    addRegexToken('MMMM', matchWord);
+
+    addParseToken(['M', 'MM'], function (input, array) {
+        array[MONTH] = toInt(input) - 1;
+    });
+
+    addParseToken(['MMM', 'MMMM'], function (input, array, config, token) {
+        var month = config._locale.monthsParse(input, token, config._strict);
+        // if we didn't find a month name, mark the date as invalid.
+        if (month != null) {
+            array[MONTH] = month;
+        } else {
+            getParsingFlags(config).invalidMonth = input;
+        }
+    });
+
+    // LOCALES
+
+    var defaultLocaleMonths = 'January_February_March_April_May_June_July_August_September_October_November_December'.split('_');
+    function localeMonths (m) {
+        return this._months[m.month()];
+    }
+
+    var defaultLocaleMonthsShort = 'Jan_Feb_Mar_Apr_May_Jun_Jul_Aug_Sep_Oct_Nov_Dec'.split('_');
+    function localeMonthsShort (m) {
+        return this._monthsShort[m.month()];
+    }
+
+    function localeMonthsParse (monthName, format, strict) {
+        var i, mom, regex;
+
+        if (!this._monthsParse) {
+            this._monthsParse = [];
+            this._longMonthsParse = [];
+            this._shortMonthsParse = [];
+        }
+
+        for (i = 0; i < 12; i++) {
+            // make the regex if we don't have it already
+            mom = create_utc__createUTC([2000, i]);
+            if (strict && !this._longMonthsParse[i]) {
+                this._longMonthsParse[i] = new RegExp('^' + this.months(mom, '').replace('.', '') + '$', 'i');
+                this._shortMonthsParse[i] = new RegExp('^' + this.monthsShort(mom, '').replace('.', '') + '$', 'i');
+            }
+            if (!strict && !this._monthsParse[i]) {
+                regex = '^' + this.months(mom, '') + '|^' + this.monthsShort(mom, '');
+                this._monthsParse[i] = new RegExp(regex.replace('.', ''), 'i');
+            }
+            // test the regex
+            if (strict && format === 'MMMM' && this._longMonthsParse[i].test(monthName)) {
+                return i;
+            } else if (strict && format === 'MMM' && this._shortMonthsParse[i].test(monthName)) {
+                return i;
+            } else if (!strict && this._monthsParse[i].test(monthName)) {
+                return i;
+            }
+        }
+    }
+
+    // MOMENTS
+
+    function setMonth (mom, value) {
+        var dayOfMonth;
+
+        // TODO: Move this out of here!
+        if (typeof value === 'string') {
+            value = mom.localeData().monthsParse(value);
+            // TODO: Another silent failure?
+            if (typeof value !== 'number') {
+                return mom;
+            }
+        }
+
+        dayOfMonth = Math.min(mom.date(), daysInMonth(mom.year(), value));
+        mom._d['set' + (mom._isUTC ? 'UTC' : '') + 'Month'](value, dayOfMonth);
+        return mom;
+    }
+
+    function getSetMonth (value) {
+        if (value != null) {
+            setMonth(this, value);
+            utils_hooks__hooks.updateOffset(this, true);
+            return this;
+        } else {
+            return get_set__get(this, 'Month');
+        }
+    }
+
+    function getDaysInMonth () {
+        return daysInMonth(this.year(), this.month());
+    }
+
+    function checkOverflow (m) {
+        var overflow;
+        var a = m._a;
+
+        if (a && getParsingFlags(m).overflow === -2) {
+            overflow =
+                a[MONTH]       < 0 || a[MONTH]       > 11  ? MONTH :
+                a[DATE]        < 1 || a[DATE]        > daysInMonth(a[YEAR], a[MONTH]) ? DATE :
+                a[HOUR]        < 0 || a[HOUR]        > 24 || (a[HOUR] === 24 && (a[MINUTE] !== 0 || a[SECOND] !== 0 || a[MILLISECOND] !== 0)) ? HOUR :
+                a[MINUTE]      < 0 || a[MINUTE]      > 59  ? MINUTE :
+                a[SECOND]      < 0 || a[SECOND]      > 59  ? SECOND :
+                a[MILLISECOND] < 0 || a[MILLISECOND] > 999 ? MILLISECOND :
+                -1;
+
+            if (getParsingFlags(m)._overflowDayOfYear && (overflow < YEAR || overflow > DATE)) {
+                overflow = DATE;
+            }
+
+            getParsingFlags(m).overflow = overflow;
+        }
+
+        return m;
+    }
+
+    function warn(msg) {
+        if (utils_hooks__hooks.suppressDeprecationWarnings === false && typeof console !== 'undefined' && console.warn) {
+            console.warn('Deprecation warning: ' + msg);
+        }
+    }
+
+    function deprecate(msg, fn) {
+        var firstTime = true;
+
+        return extend(function () {
+            if (firstTime) {
+                warn(msg + '\n' + (new Error()).stack);
+                firstTime = false;
+            }
+            return fn.apply(this, arguments);
+        }, fn);
+    }
+
+    var deprecations = {};
+
+    function deprecateSimple(name, msg) {
+        if (!deprecations[name]) {
+            warn(msg);
+            deprecations[name] = true;
+        }
+    }
+
+    utils_hooks__hooks.suppressDeprecationWarnings = false;
+
+    var from_string__isoRegex = /^\s*(?:[+-]\d{6}|\d{4})-(?:(\d\d-\d\d)|(W\d\d$)|(W\d\d-\d)|(\d\d\d))((T| )(\d\d(:\d\d(:\d\d(\.\d+)?)?)?)?([\+\-]\d\d(?::?\d\d)?|\s*Z)?)?$/;
+
+    var isoDates = [
+        ['YYYYYY-MM-DD', /[+-]\d{6}-\d{2}-\d{2}/],
+        ['YYYY-MM-DD', /\d{4}-\d{2}-\d{2}/],
+        ['GGGG-[W]WW-E', /\d{4}-W\d{2}-\d/],
+        ['GGGG-[W]WW', /\d{4}-W\d{2}/],
+        ['YYYY-DDD', /\d{4}-\d{3}/]
+    ];
+
+    // iso time formats and regexes
+    var isoTimes = [
+        ['HH:mm:ss.SSSS', /(T| )\d\d:\d\d:\d\d\.\d+/],
+        ['HH:mm:ss', /(T| )\d\d:\d\d:\d\d/],
+        ['HH:mm', /(T| )\d\d:\d\d/],
+        ['HH', /(T| )\d\d/]
+    ];
+
+    var aspNetJsonRegex = /^\/?Date\((\-?\d+)/i;
+
+    // date from iso format
+    function configFromISO(config) {
+        var i, l,
+            string = config._i,
+            match = from_string__isoRegex.exec(string);
+
+        if (match) {
+            getParsingFlags(config).iso = true;
+            for (i = 0, l = isoDates.length; i < l; i++) {
+                if (isoDates[i][1].exec(string)) {
+                    config._f = isoDates[i][0];
+                    break;
+                }
+            }
+            for (i = 0, l = isoTimes.length; i < l; i++) {
+                if (isoTimes[i][1].exec(string)) {
+                    // match[6] should be 'T' or space
+                    config._f += (match[6] || ' ') + isoTimes[i][0];
+                    break;
+                }
+            }
+            if (string.match(matchOffset)) {
+                config._f += 'Z';
+            }
+            configFromStringAndFormat(config);
+        } else {
+            config._isValid = false;
+        }
+    }
+
+    // date from iso format or fallback
+    function configFromString(config) {
+        var matched = aspNetJsonRegex.exec(config._i);
+
+        if (matched !== null) {
+            config._d = new Date(+matched[1]);
+            return;
+        }
+
+        configFromISO(config);
+        if (config._isValid === false) {
+            delete config._isValid;
+            utils_hooks__hooks.createFromInputFallback(config);
+        }
+    }
+
+    utils_hooks__hooks.createFromInputFallback = deprecate(
+        'moment construction falls back to js Date. This is ' +
+        'discouraged and will be removed in upcoming major ' +
+        'release. Please refer to ' +
+        'https://github.com/moment/moment/issues/1407 for more info.',
+        function (config) {
+            config._d = new Date(config._i + (config._useUTC ? ' UTC' : ''));
+        }
+    );
+
+    function createDate (y, m, d, h, M, s, ms) {
+        //can't just apply() to create a date:
+        //http://stackoverflow.com/questions/181348/instantiating-a-javascript-object-by-calling-prototype-constructor-apply
+        var date = new Date(y, m, d, h, M, s, ms);
+
+        //the date constructor doesn't accept years < 1970
+        if (y < 1970) {
+            date.setFullYear(y);
+        }
+        return date;
+    }
+
+    function createUTCDate (y) {
+        var date = new Date(Date.UTC.apply(null, arguments));
+        if (y < 1970) {
+            date.setUTCFullYear(y);
+        }
+        return date;
+    }
+
+    addFormatToken(0, ['YY', 2], 0, function () {
+        return this.year() % 100;
+    });
+
+    addFormatToken(0, ['YYYY',   4],       0, 'year');
+    addFormatToken(0, ['YYYYY',  5],       0, 'year');
+    addFormatToken(0, ['YYYYYY', 6, true], 0, 'year');
+
+    // ALIASES
+
+    addUnitAlias('year', 'y');
+
+    // PARSING
+
+    addRegexToken('Y',      matchSigned);
+    addRegexToken('YY',     match1to2, match2);
+    addRegexToken('YYYY',   match1to4, match4);
+    addRegexToken('YYYYY',  match1to6, match6);
+    addRegexToken('YYYYYY', match1to6, match6);
+
+    addParseToken(['YYYYY', 'YYYYYY'], YEAR);
+    addParseToken('YYYY', function (input, array) {
+        array[YEAR] = input.length === 2 ? utils_hooks__hooks.parseTwoDigitYear(input) : toInt(input);
+    });
+    addParseToken('YY', function (input, array) {
+        array[YEAR] = utils_hooks__hooks.parseTwoDigitYear(input);
+    });
+
+    // HELPERS
+
+    function daysInYear(year) {
+        return isLeapYear(year) ? 366 : 365;
+    }
+
+    function isLeapYear(year) {
+        return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    }
+
+    // HOOKS
+
+    utils_hooks__hooks.parseTwoDigitYear = function (input) {
+        return toInt(input) + (toInt(input) > 68 ? 1900 : 2000);
+    };
+
+    // MOMENTS
+
+    var getSetYear = makeGetSet('FullYear', false);
+
+    function getIsLeapYear () {
+        return isLeapYear(this.year());
+    }
+
+    addFormatToken('w', ['ww', 2], 'wo', 'week');
+    addFormatToken('W', ['WW', 2], 'Wo', 'isoWeek');
+
+    // ALIASES
+
+    addUnitAlias('week', 'w');
+    addUnitAlias('isoWeek', 'W');
+
+    // PARSING
+
+    addRegexToken('w',  match1to2);
+    addRegexToken('ww', match1to2, match2);
+    addRegexToken('W',  match1to2);
+    addRegexToken('WW', match1to2, match2);
+
+    addWeekParseToken(['w', 'ww', 'W', 'WW'], function (input, week, config, token) {
+        week[token.substr(0, 1)] = toInt(input);
+    });
+
+    // HELPERS
+
+    // firstDayOfWeek       0 = sun, 6 = sat
+    //                      the day of the week that starts the week
+    //                      (usually sunday or monday)
+    // firstDayOfWeekOfYear 0 = sun, 6 = sat
+    //                      the first week is the week that contains the first
+    //                      of this day of the week
+    //                      (eg. ISO weeks use thursday (4))
+    function weekOfYear(mom, firstDayOfWeek, firstDayOfWeekOfYear) {
+        var end = firstDayOfWeekOfYear - firstDayOfWeek,
+            daysToDayOfWeek = firstDayOfWeekOfYear - mom.day(),
+            adjustedMoment;
+
+
+        if (daysToDayOfWeek > end) {
+            daysToDayOfWeek -= 7;
+        }
+
+        if (daysToDayOfWeek < end - 7) {
+            daysToDayOfWeek += 7;
+        }
+
+        adjustedMoment = local__createLocal(mom).add(daysToDayOfWeek, 'd');
+        return {
+            week: Math.ceil(adjustedMoment.dayOfYear() / 7),
+            year: adjustedMoment.year()
+        };
+    }
+
+    // LOCALES
+
+    function localeWeek (mom) {
+        return weekOfYear(mom, this._week.dow, this._week.doy).week;
+    }
+
+    var defaultLocaleWeek = {
+        dow : 0, // Sunday is the first day of the week.
+        doy : 6  // The week that contains Jan 1st is the first week of the year.
+    };
+
+    function localeFirstDayOfWeek () {
+        return this._week.dow;
+    }
+
+    function localeFirstDayOfYear () {
+        return this._week.doy;
+    }
+
+    // MOMENTS
+
+    function getSetWeek (input) {
+        var week = this.localeData().week(this);
+        return input == null ? week : this.add((input - week) * 7, 'd');
+    }
+
+    function getSetISOWeek (input) {
+        var week = weekOfYear(this, 1, 4).week;
+        return input == null ? week : this.add((input - week) * 7, 'd');
+    }
+
+    addFormatToken('DDD', ['DDDD', 3], 'DDDo', 'dayOfYear');
+
+    // ALIASES
+
+    addUnitAlias('dayOfYear', 'DDD');
+
+    // PARSING
+
+    addRegexToken('DDD',  match1to3);
+    addRegexToken('DDDD', match3);
+    addParseToken(['DDD', 'DDDD'], function (input, array, config) {
+        config._dayOfYear = toInt(input);
+    });
+
+    // HELPERS
+
+    //http://en.wikipedia.org/wiki/ISO_week_date#Calculating_a_date_given_the_year.2C_week_number_and_weekday
+    function dayOfYearFromWeeks(year, week, weekday, firstDayOfWeekOfYear, firstDayOfWeek) {
+        var week1Jan = 6 + firstDayOfWeek - firstDayOfWeekOfYear, janX = createUTCDate(year, 0, 1 + week1Jan), d = janX.getUTCDay(), dayOfYear;
+        if (d < firstDayOfWeek) {
+            d += 7;
+        }
+
+        weekday = weekday != null ? 1 * weekday : firstDayOfWeek;
+
+        dayOfYear = 1 + week1Jan + 7 * (week - 1) - d + weekday;
+
+        return {
+            year: dayOfYear > 0 ? year : year - 1,
+            dayOfYear: dayOfYear > 0 ?  dayOfYear : daysInYear(year - 1) + dayOfYear
+        };
+    }
+
+    // MOMENTS
+
+    function getSetDayOfYear (input) {
+        var dayOfYear = Math.round((this.clone().startOf('day') - this.clone().startOf('year')) / 864e5) + 1;
+        return input == null ? dayOfYear : this.add((input - dayOfYear), 'd');
+    }
+
+    // Pick the first defined of two or three arguments.
+    function defaults(a, b, c) {
+        if (a != null) {
+            return a;
+        }
+        if (b != null) {
+            return b;
+        }
+        return c;
+    }
+
+    function currentDateArray(config) {
+        var now = new Date();
+        if (config._useUTC) {
+            return [now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()];
+        }
+        return [now.getFullYear(), now.getMonth(), now.getDate()];
+    }
+
+    // convert an array to a date.
+    // the array should mirror the parameters below
+    // note: all values past the year are optional and will default to the lowest possible value.
+    // [year, month, day , hour, minute, second, millisecond]
+    function configFromArray (config) {
+        var i, date, input = [], currentDate, yearToUse;
+
+        if (config._d) {
+            return;
+        }
+
+        currentDate = currentDateArray(config);
+
+        //compute day of the year from weeks and weekdays
+        if (config._w && config._a[DATE] == null && config._a[MONTH] == null) {
+            dayOfYearFromWeekInfo(config);
+        }
+
+        //if the day of the year is set, figure out what it is
+        if (config._dayOfYear) {
+            yearToUse = defaults(config._a[YEAR], currentDate[YEAR]);
+
+            if (config._dayOfYear > daysInYear(yearToUse)) {
+                getParsingFlags(config)._overflowDayOfYear = true;
+            }
+
+            date = createUTCDate(yearToUse, 0, config._dayOfYear);
+            config._a[MONTH] = date.getUTCMonth();
+            config._a[DATE] = date.getUTCDate();
+        }
+
+        // Default to current date.
+        // * if no year, month, day of month are given, default to today
+        // * if day of month is given, default month and year
+        // * if month is given, default only year
+        // * if year is given, don't default anything
+        for (i = 0; i < 3 && config._a[i] == null; ++i) {
+            config._a[i] = input[i] = currentDate[i];
+        }
+
+        // Zero out whatever was not defaulted, including time
+        for (; i < 7; i++) {
+            config._a[i] = input[i] = (config._a[i] == null) ? (i === 2 ? 1 : 0) : config._a[i];
+        }
+
+        // Check for 24:00:00.000
+        if (config._a[HOUR] === 24 &&
+                config._a[MINUTE] === 0 &&
+                config._a[SECOND] === 0 &&
+                config._a[MILLISECOND] === 0) {
+            config._nextDay = true;
+            config._a[HOUR] = 0;
+        }
+
+        config._d = (config._useUTC ? createUTCDate : createDate).apply(null, input);
+        // Apply timezone offset from input. The actual utcOffset can be changed
+        // with parseZone.
+        if (config._tzm != null) {
+            config._d.setUTCMinutes(config._d.getUTCMinutes() - config._tzm);
+        }
+
+        if (config._nextDay) {
+            config._a[HOUR] = 24;
+        }
+    }
+
+    function dayOfYearFromWeekInfo(config) {
+        var w, weekYear, week, weekday, dow, doy, temp;
+
+        w = config._w;
+        if (w.GG != null || w.W != null || w.E != null) {
+            dow = 1;
+            doy = 4;
+
+            // TODO: We need to take the current isoWeekYear, but that depends on
+            // how we interpret now (local, utc, fixed offset). So create
+            // a now version of current config (take local/utc/offset flags, and
+            // create now).
+            weekYear = defaults(w.GG, config._a[YEAR], weekOfYear(local__createLocal(), 1, 4).year);
+            week = defaults(w.W, 1);
+            weekday = defaults(w.E, 1);
+        } else {
+            dow = config._locale._week.dow;
+            doy = config._locale._week.doy;
+
+            weekYear = defaults(w.gg, config._a[YEAR], weekOfYear(local__createLocal(), dow, doy).year);
+            week = defaults(w.w, 1);
+
+            if (w.d != null) {
+                // weekday -- low day numbers are considered next week
+                weekday = w.d;
+                if (weekday < dow) {
+                    ++week;
+                }
+            } else if (w.e != null) {
+                // local weekday -- counting starts from begining of week
+                weekday = w.e + dow;
+            } else {
+                // default to begining of week
+                weekday = dow;
+            }
+        }
+        temp = dayOfYearFromWeeks(weekYear, week, weekday, doy, dow);
+
+        config._a[YEAR] = temp.year;
+        config._dayOfYear = temp.dayOfYear;
+    }
+
+    utils_hooks__hooks.ISO_8601 = function () {};
+
+    // date from string and format string
+    function configFromStringAndFormat(config) {
+        // TODO: Move this to another part of the creation flow to prevent circular deps
+        if (config._f === utils_hooks__hooks.ISO_8601) {
+            configFromISO(config);
+            return;
+        }
+
+        config._a = [];
+        getParsingFlags(config).empty = true;
+
+        // This array is used to make a Date, either with `new Date` or `Date.UTC`
+        var string = '' + config._i,
+            i, parsedInput, tokens, token, skipped,
+            stringLength = string.length,
+            totalParsedInputLength = 0;
+
+        tokens = expandFormat(config._f, config._locale).match(formattingTokens) || [];
+
+        for (i = 0; i < tokens.length; i++) {
+            token = tokens[i];
+            parsedInput = (string.match(getParseRegexForToken(token, config)) || [])[0];
+            if (parsedInput) {
+                skipped = string.substr(0, string.indexOf(parsedInput));
+                if (skipped.length > 0) {
+                    getParsingFlags(config).unusedInput.push(skipped);
+                }
+                string = string.slice(string.indexOf(parsedInput) + parsedInput.length);
+                totalParsedInputLength += parsedInput.length;
+            }
+            // don't parse if it's not a known token
+            if (formatTokenFunctions[token]) {
+                if (parsedInput) {
+                    getParsingFlags(config).empty = false;
+                }
+                else {
+                    getParsingFlags(config).unusedTokens.push(token);
+                }
+                addTimeToArrayFromToken(token, parsedInput, config);
+            }
+            else if (config._strict && !parsedInput) {
+                getParsingFlags(config).unusedTokens.push(token);
+            }
+        }
+
+        // add remaining unparsed input length to the string
+        getParsingFlags(config).charsLeftOver = stringLength - totalParsedInputLength;
+        if (string.length > 0) {
+            getParsingFlags(config).unusedInput.push(string);
+        }
+
+        // clear _12h flag if hour is <= 12
+        if (getParsingFlags(config).bigHour === true &&
+                config._a[HOUR] <= 12 &&
+                config._a[HOUR] > 0) {
+            getParsingFlags(config).bigHour = undefined;
+        }
+        // handle meridiem
+        config._a[HOUR] = meridiemFixWrap(config._locale, config._a[HOUR], config._meridiem);
+
+        configFromArray(config);
+        checkOverflow(config);
+    }
+
+
+    function meridiemFixWrap (locale, hour, meridiem) {
+        var isPm;
+
+        if (meridiem == null) {
+            // nothing to do
+            return hour;
+        }
+        if (locale.meridiemHour != null) {
+            return locale.meridiemHour(hour, meridiem);
+        } else if (locale.isPM != null) {
+            // Fallback
+            isPm = locale.isPM(meridiem);
+            if (isPm && hour < 12) {
+                hour += 12;
+            }
+            if (!isPm && hour === 12) {
+                hour = 0;
+            }
+            return hour;
+        } else {
+            // this is not supposed to happen
+            return hour;
+        }
+    }
+
+    function configFromStringAndArray(config) {
+        var tempConfig,
+            bestMoment,
+
+            scoreToBeat,
+            i,
+            currentScore;
+
+        if (config._f.length === 0) {
+            getParsingFlags(config).invalidFormat = true;
+            config._d = new Date(NaN);
+            return;
+        }
+
+        for (i = 0; i < config._f.length; i++) {
+            currentScore = 0;
+            tempConfig = copyConfig({}, config);
+            if (config._useUTC != null) {
+                tempConfig._useUTC = config._useUTC;
+            }
+            tempConfig._f = config._f[i];
+            configFromStringAndFormat(tempConfig);
+
+            if (!valid__isValid(tempConfig)) {
+                continue;
+            }
+
+            // if there is any input that was not parsed add a penalty for that format
+            currentScore += getParsingFlags(tempConfig).charsLeftOver;
+
+            //or tokens
+            currentScore += getParsingFlags(tempConfig).unusedTokens.length * 10;
+
+            getParsingFlags(tempConfig).score = currentScore;
+
+            if (scoreToBeat == null || currentScore < scoreToBeat) {
+                scoreToBeat = currentScore;
+                bestMoment = tempConfig;
+            }
+        }
+
+        extend(config, bestMoment || tempConfig);
+    }
+
+    function configFromObject(config) {
+        if (config._d) {
+            return;
+        }
+
+        var i = normalizeObjectUnits(config._i);
+        config._a = [i.year, i.month, i.day || i.date, i.hour, i.minute, i.second, i.millisecond];
+
+        configFromArray(config);
+    }
+
+    function createFromConfig (config) {
+        var res = new Moment(checkOverflow(prepareConfig(config)));
+        if (res._nextDay) {
+            // Adding is smart enough around DST
+            res.add(1, 'd');
+            res._nextDay = undefined;
+        }
+
+        return res;
+    }
+
+    function prepareConfig (config) {
+        var input = config._i,
+            format = config._f;
+
+        config._locale = config._locale || locale_locales__getLocale(config._l);
+
+        if (input === null || (format === undefined && input === '')) {
+            return valid__createInvalid({nullInput: true});
+        }
+
+        if (typeof input === 'string') {
+            config._i = input = config._locale.preparse(input);
+        }
+
+        if (isMoment(input)) {
+            return new Moment(checkOverflow(input));
+        } else if (isArray(format)) {
+            configFromStringAndArray(config);
+        } else if (format) {
+            configFromStringAndFormat(config);
+        } else if (isDate(input)) {
+            config._d = input;
+        } else {
+            configFromInput(config);
+        }
+
+        return config;
+    }
+
+    function configFromInput(config) {
+        var input = config._i;
+        if (input === undefined) {
+            config._d = new Date();
+        } else if (isDate(input)) {
+            config._d = new Date(+input);
+        } else if (typeof input === 'string') {
+            configFromString(config);
+        } else if (isArray(input)) {
+            config._a = map(input.slice(0), function (obj) {
+                return parseInt(obj, 10);
+            });
+            configFromArray(config);
+        } else if (typeof(input) === 'object') {
+            configFromObject(config);
+        } else if (typeof(input) === 'number') {
+            // from milliseconds
+            config._d = new Date(input);
+        } else {
+            utils_hooks__hooks.createFromInputFallback(config);
+        }
+    }
+
+    function createLocalOrUTC (input, format, locale, strict, isUTC) {
+        var c = {};
+
+        if (typeof(locale) === 'boolean') {
+            strict = locale;
+            locale = undefined;
+        }
+        // object construction must be done this way.
+        // https://github.com/moment/moment/issues/1423
+        c._isAMomentObject = true;
+        c._useUTC = c._isUTC = isUTC;
+        c._l = locale;
+        c._i = input;
+        c._f = format;
+        c._strict = strict;
+
+        return createFromConfig(c);
+    }
+
+    function local__createLocal (input, format, locale, strict) {
+        return createLocalOrUTC(input, format, locale, strict, false);
+    }
+
+    var prototypeMin = deprecate(
+         'moment().min is deprecated, use moment.min instead. https://github.com/moment/moment/issues/1548',
+         function () {
+             var other = local__createLocal.apply(null, arguments);
+             return other < this ? this : other;
+         }
+     );
+
+    var prototypeMax = deprecate(
+        'moment().max is deprecated, use moment.max instead. https://github.com/moment/moment/issues/1548',
+        function () {
+            var other = local__createLocal.apply(null, arguments);
+            return other > this ? this : other;
+        }
+    );
+
+    // Pick a moment m from moments so that m[fn](other) is true for all
+    // other. This relies on the function fn to be transitive.
+    //
+    // moments should either be an array of moment objects or an array, whose
+    // first element is an array of moment objects.
+    function pickBy(fn, moments) {
+        var res, i;
+        if (moments.length === 1 && isArray(moments[0])) {
+            moments = moments[0];
+        }
+        if (!moments.length) {
+            return local__createLocal();
+        }
+        res = moments[0];
+        for (i = 1; i < moments.length; ++i) {
+            if (!moments[i].isValid() || moments[i][fn](res)) {
+                res = moments[i];
+            }
+        }
+        return res;
+    }
+
+    // TODO: Use [].sort instead?
+    function min () {
+        var args = [].slice.call(arguments, 0);
+
+        return pickBy('isBefore', args);
+    }
+
+    function max () {
+        var args = [].slice.call(arguments, 0);
+
+        return pickBy('isAfter', args);
+    }
+
+    function Duration (duration) {
+        var normalizedInput = normalizeObjectUnits(duration),
+            years = normalizedInput.year || 0,
+            quarters = normalizedInput.quarter || 0,
+            months = normalizedInput.month || 0,
+            weeks = normalizedInput.week || 0,
+            days = normalizedInput.day || 0,
+            hours = normalizedInput.hour || 0,
+            minutes = normalizedInput.minute || 0,
+            seconds = normalizedInput.second || 0,
+            milliseconds = normalizedInput.millisecond || 0;
+
+        // representation for dateAddRemove
+        this._milliseconds = +milliseconds +
+            seconds * 1e3 + // 1000
+            minutes * 6e4 + // 1000 * 60
+            hours * 36e5; // 1000 * 60 * 60
+        // Because of dateAddRemove treats 24 hours as different from a
+        // day when working around DST, we need to store them separately
+        this._days = +days +
+            weeks * 7;
+        // It is impossible translate months into days without knowing
+        // which months you are are talking about, so we have to store
+        // it separately.
+        this._months = +months +
+            quarters * 3 +
+            years * 12;
+
+        this._data = {};
+
+        this._locale = locale_locales__getLocale();
+
+        this._bubble();
+    }
+
+    function isDuration (obj) {
+        return obj instanceof Duration;
+    }
+
+    function offset (token, separator) {
+        addFormatToken(token, 0, 0, function () {
+            var offset = this.utcOffset();
+            var sign = '+';
+            if (offset < 0) {
+                offset = -offset;
+                sign = '-';
+            }
+            return sign + zeroFill(~~(offset / 60), 2) + separator + zeroFill(~~(offset) % 60, 2);
+        });
+    }
+
+    offset('Z', ':');
+    offset('ZZ', '');
+
+    // PARSING
+
+    addRegexToken('Z',  matchOffset);
+    addRegexToken('ZZ', matchOffset);
+    addParseToken(['Z', 'ZZ'], function (input, array, config) {
+        config._useUTC = true;
+        config._tzm = offsetFromString(input);
+    });
+
+    // HELPERS
+
+    // timezone chunker
+    // '+10:00' > ['10',  '00']
+    // '-1530'  > ['-15', '30']
+    var chunkOffset = /([\+\-]|\d\d)/gi;
+
+    function offsetFromString(string) {
+        var matches = ((string || '').match(matchOffset) || []);
+        var chunk   = matches[matches.length - 1] || [];
+        var parts   = (chunk + '').match(chunkOffset) || ['-', 0, 0];
+        var minutes = +(parts[1] * 60) + toInt(parts[2]);
+
+        return parts[0] === '+' ? minutes : -minutes;
+    }
+
+    // Return a moment from input, that is local/utc/zone equivalent to model.
+    function cloneWithOffset(input, model) {
+        var res, diff;
+        if (model._isUTC) {
+            res = model.clone();
+            diff = (isMoment(input) || isDate(input) ? +input : +local__createLocal(input)) - (+res);
+            // Use low-level api, because this fn is low-level api.
+            res._d.setTime(+res._d + diff);
+            utils_hooks__hooks.updateOffset(res, false);
+            return res;
+        } else {
+            return local__createLocal(input).local();
+        }
+    }
+
+    function getDateOffset (m) {
+        // On Firefox.24 Date#getTimezoneOffset returns a floating point.
+        // https://github.com/moment/moment/pull/1871
+        return -Math.round(m._d.getTimezoneOffset() / 15) * 15;
+    }
+
+    // HOOKS
+
+    // This function will be called whenever a moment is mutated.
+    // It is intended to keep the offset in sync with the timezone.
+    utils_hooks__hooks.updateOffset = function () {};
+
+    // MOMENTS
+
+    // keepLocalTime = true means only change the timezone, without
+    // affecting the local hour. So 5:31:26 +0300 --[utcOffset(2, true)]-->
+    // 5:31:26 +0200 It is possible that 5:31:26 doesn't exist with offset
+    // +0200, so we adjust the time as needed, to be valid.
+    //
+    // Keeping the time actually adds/subtracts (one hour)
+    // from the actual represented time. That is why we call updateOffset
+    // a second time. In case it wants us to change the offset again
+    // _changeInProgress == true case, then we have to adjust, because
+    // there is no such time in the given timezone.
+    function getSetOffset (input, keepLocalTime) {
+        var offset = this._offset || 0,
+            localAdjust;
+        if (input != null) {
+            if (typeof input === 'string') {
+                input = offsetFromString(input);
+            }
+            if (Math.abs(input) < 16) {
+                input = input * 60;
+            }
+            if (!this._isUTC && keepLocalTime) {
+                localAdjust = getDateOffset(this);
+            }
+            this._offset = input;
+            this._isUTC = true;
+            if (localAdjust != null) {
+                this.add(localAdjust, 'm');
+            }
+            if (offset !== input) {
+                if (!keepLocalTime || this._changeInProgress) {
+                    add_subtract__addSubtract(this, create__createDuration(input - offset, 'm'), 1, false);
+                } else if (!this._changeInProgress) {
+                    this._changeInProgress = true;
+                    utils_hooks__hooks.updateOffset(this, true);
+                    this._changeInProgress = null;
+                }
+            }
+            return this;
+        } else {
+            return this._isUTC ? offset : getDateOffset(this);
+        }
+    }
+
+    function getSetZone (input, keepLocalTime) {
+        if (input != null) {
+            if (typeof input !== 'string') {
+                input = -input;
+            }
+
+            this.utcOffset(input, keepLocalTime);
+
+            return this;
+        } else {
+            return -this.utcOffset();
+        }
+    }
+
+    function setOffsetToUTC (keepLocalTime) {
+        return this.utcOffset(0, keepLocalTime);
+    }
+
+    function setOffsetToLocal (keepLocalTime) {
+        if (this._isUTC) {
+            this.utcOffset(0, keepLocalTime);
+            this._isUTC = false;
+
+            if (keepLocalTime) {
+                this.subtract(getDateOffset(this), 'm');
+            }
+        }
+        return this;
+    }
+
+    function setOffsetToParsedOffset () {
+        if (this._tzm) {
+            this.utcOffset(this._tzm);
+        } else if (typeof this._i === 'string') {
+            this.utcOffset(offsetFromString(this._i));
+        }
+        return this;
+    }
+
+    function hasAlignedHourOffset (input) {
+        input = input ? local__createLocal(input).utcOffset() : 0;
+
+        return (this.utcOffset() - input) % 60 === 0;
+    }
+
+    function isDaylightSavingTime () {
+        return (
+            this.utcOffset() > this.clone().month(0).utcOffset() ||
+            this.utcOffset() > this.clone().month(5).utcOffset()
+        );
+    }
+
+    function isDaylightSavingTimeShifted () {
+        if (typeof this._isDSTShifted !== 'undefined') {
+            return this._isDSTShifted;
+        }
+
+        var c = {};
+
+        copyConfig(c, this);
+        c = prepareConfig(c);
+
+        if (c._a) {
+            var other = c._isUTC ? create_utc__createUTC(c._a) : local__createLocal(c._a);
+            this._isDSTShifted = this.isValid() &&
+                compareArrays(c._a, other.toArray()) > 0;
+        } else {
+            this._isDSTShifted = false;
+        }
+
+        return this._isDSTShifted;
+    }
+
+    function isLocal () {
+        return !this._isUTC;
+    }
+
+    function isUtcOffset () {
+        return this._isUTC;
+    }
+
+    function isUtc () {
+        return this._isUTC && this._offset === 0;
+    }
+
+    var aspNetRegex = /(\-)?(?:(\d*)\.)?(\d+)\:(\d+)(?:\:(\d+)\.?(\d{3})?)?/;
+
+    // from http://docs.closure-library.googlecode.com/git/closure_goog_date_date.js.source.html
+    // somewhat more in line with 4.4.3.2 2004 spec, but allows decimal anywhere
+    var create__isoRegex = /^(-)?P(?:(?:([0-9,.]*)Y)?(?:([0-9,.]*)M)?(?:([0-9,.]*)D)?(?:T(?:([0-9,.]*)H)?(?:([0-9,.]*)M)?(?:([0-9,.]*)S)?)?|([0-9,.]*)W)$/;
+
+    function create__createDuration (input, key) {
+        var duration = input,
+            // matching against regexp is expensive, do it on demand
+            match = null,
+            sign,
+            ret,
+            diffRes;
+
+        if (isDuration(input)) {
+            duration = {
+                ms : input._milliseconds,
+                d  : input._days,
+                M  : input._months
+            };
+        } else if (typeof input === 'number') {
+            duration = {};
+            if (key) {
+                duration[key] = input;
+            } else {
+                duration.milliseconds = input;
+            }
+        } else if (!!(match = aspNetRegex.exec(input))) {
+            sign = (match[1] === '-') ? -1 : 1;
+            duration = {
+                y  : 0,
+                d  : toInt(match[DATE])        * sign,
+                h  : toInt(match[HOUR])        * sign,
+                m  : toInt(match[MINUTE])      * sign,
+                s  : toInt(match[SECOND])      * sign,
+                ms : toInt(match[MILLISECOND]) * sign
+            };
+        } else if (!!(match = create__isoRegex.exec(input))) {
+            sign = (match[1] === '-') ? -1 : 1;
+            duration = {
+                y : parseIso(match[2], sign),
+                M : parseIso(match[3], sign),
+                d : parseIso(match[4], sign),
+                h : parseIso(match[5], sign),
+                m : parseIso(match[6], sign),
+                s : parseIso(match[7], sign),
+                w : parseIso(match[8], sign)
+            };
+        } else if (duration == null) {// checks for null or undefined
+            duration = {};
+        } else if (typeof duration === 'object' && ('from' in duration || 'to' in duration)) {
+            diffRes = momentsDifference(local__createLocal(duration.from), local__createLocal(duration.to));
+
+            duration = {};
+            duration.ms = diffRes.milliseconds;
+            duration.M = diffRes.months;
+        }
+
+        ret = new Duration(duration);
+
+        if (isDuration(input) && hasOwnProp(input, '_locale')) {
+            ret._locale = input._locale;
+        }
+
+        return ret;
+    }
+
+    create__createDuration.fn = Duration.prototype;
+
+    function parseIso (inp, sign) {
+        // We'd normally use ~~inp for this, but unfortunately it also
+        // converts floats to ints.
+        // inp may be undefined, so careful calling replace on it.
+        var res = inp && parseFloat(inp.replace(',', '.'));
+        // apply sign while we're at it
+        return (isNaN(res) ? 0 : res) * sign;
+    }
+
+    function positiveMomentsDifference(base, other) {
+        var res = {milliseconds: 0, months: 0};
+
+        res.months = other.month() - base.month() +
+            (other.year() - base.year()) * 12;
+        if (base.clone().add(res.months, 'M').isAfter(other)) {
+            --res.months;
+        }
+
+        res.milliseconds = +other - +(base.clone().add(res.months, 'M'));
+
+        return res;
+    }
+
+    function momentsDifference(base, other) {
+        var res;
+        other = cloneWithOffset(other, base);
+        if (base.isBefore(other)) {
+            res = positiveMomentsDifference(base, other);
+        } else {
+            res = positiveMomentsDifference(other, base);
+            res.milliseconds = -res.milliseconds;
+            res.months = -res.months;
+        }
+
+        return res;
+    }
+
+    function createAdder(direction, name) {
+        return function (val, period) {
+            var dur, tmp;
+            //invert the arguments, but complain about it
+            if (period !== null && !isNaN(+period)) {
+                deprecateSimple(name, 'moment().' + name  + '(period, number) is deprecated. Please use moment().' + name + '(number, period).');
+                tmp = val; val = period; period = tmp;
+            }
+
+            val = typeof val === 'string' ? +val : val;
+            dur = create__createDuration(val, period);
+            add_subtract__addSubtract(this, dur, direction);
+            return this;
+        };
+    }
+
+    function add_subtract__addSubtract (mom, duration, isAdding, updateOffset) {
+        var milliseconds = duration._milliseconds,
+            days = duration._days,
+            months = duration._months;
+        updateOffset = updateOffset == null ? true : updateOffset;
+
+        if (milliseconds) {
+            mom._d.setTime(+mom._d + milliseconds * isAdding);
+        }
+        if (days) {
+            get_set__set(mom, 'Date', get_set__get(mom, 'Date') + days * isAdding);
+        }
+        if (months) {
+            setMonth(mom, get_set__get(mom, 'Month') + months * isAdding);
+        }
+        if (updateOffset) {
+            utils_hooks__hooks.updateOffset(mom, days || months);
+        }
+    }
+
+    var add_subtract__add      = createAdder(1, 'add');
+    var add_subtract__subtract = createAdder(-1, 'subtract');
+
+    function moment_calendar__calendar (time, formats) {
+        // We want to compare the start of today, vs this.
+        // Getting start-of-today depends on whether we're local/utc/offset or not.
+        var now = time || local__createLocal(),
+            sod = cloneWithOffset(now, this).startOf('day'),
+            diff = this.diff(sod, 'days', true),
+            format = diff < -6 ? 'sameElse' :
+                diff < -1 ? 'lastWeek' :
+                diff < 0 ? 'lastDay' :
+                diff < 1 ? 'sameDay' :
+                diff < 2 ? 'nextDay' :
+                diff < 7 ? 'nextWeek' : 'sameElse';
+        return this.format(formats && formats[format] || this.localeData().calendar(format, this, local__createLocal(now)));
+    }
+
+    function clone () {
+        return new Moment(this);
+    }
+
+    function isAfter (input, units) {
+        var inputMs;
+        units = normalizeUnits(typeof units !== 'undefined' ? units : 'millisecond');
+        if (units === 'millisecond') {
+            input = isMoment(input) ? input : local__createLocal(input);
+            return +this > +input;
+        } else {
+            inputMs = isMoment(input) ? +input : +local__createLocal(input);
+            return inputMs < +this.clone().startOf(units);
+        }
+    }
+
+    function isBefore (input, units) {
+        var inputMs;
+        units = normalizeUnits(typeof units !== 'undefined' ? units : 'millisecond');
+        if (units === 'millisecond') {
+            input = isMoment(input) ? input : local__createLocal(input);
+            return +this < +input;
+        } else {
+            inputMs = isMoment(input) ? +input : +local__createLocal(input);
+            return +this.clone().endOf(units) < inputMs;
+        }
+    }
+
+    function isBetween (from, to, units) {
+        return this.isAfter(from, units) && this.isBefore(to, units);
+    }
+
+    function isSame (input, units) {
+        var inputMs;
+        units = normalizeUnits(units || 'millisecond');
+        if (units === 'millisecond') {
+            input = isMoment(input) ? input : local__createLocal(input);
+            return +this === +input;
+        } else {
+            inputMs = +local__createLocal(input);
+            return +(this.clone().startOf(units)) <= inputMs && inputMs <= +(this.clone().endOf(units));
+        }
+    }
+
+    function diff (input, units, asFloat) {
+        var that = cloneWithOffset(input, this),
+            zoneDelta = (that.utcOffset() - this.utcOffset()) * 6e4,
+            delta, output;
+
+        units = normalizeUnits(units);
+
+        if (units === 'year' || units === 'month' || units === 'quarter') {
+            output = monthDiff(this, that);
+            if (units === 'quarter') {
+                output = output / 3;
+            } else if (units === 'year') {
+                output = output / 12;
+            }
+        } else {
+            delta = this - that;
+            output = units === 'second' ? delta / 1e3 : // 1000
+                units === 'minute' ? delta / 6e4 : // 1000 * 60
+                units === 'hour' ? delta / 36e5 : // 1000 * 60 * 60
+                units === 'day' ? (delta - zoneDelta) / 864e5 : // 1000 * 60 * 60 * 24, negate dst
+                units === 'week' ? (delta - zoneDelta) / 6048e5 : // 1000 * 60 * 60 * 24 * 7, negate dst
+                delta;
+        }
+        return asFloat ? output : absFloor(output);
+    }
+
+    function monthDiff (a, b) {
+        // difference in months
+        var wholeMonthDiff = ((b.year() - a.year()) * 12) + (b.month() - a.month()),
+            // b is in (anchor - 1 month, anchor + 1 month)
+            anchor = a.clone().add(wholeMonthDiff, 'months'),
+            anchor2, adjust;
+
+        if (b - anchor < 0) {
+            anchor2 = a.clone().add(wholeMonthDiff - 1, 'months');
+            // linear across the month
+            adjust = (b - anchor) / (anchor - anchor2);
+        } else {
+            anchor2 = a.clone().add(wholeMonthDiff + 1, 'months');
+            // linear across the month
+            adjust = (b - anchor) / (anchor2 - anchor);
+        }
+
+        return -(wholeMonthDiff + adjust);
+    }
+
+    utils_hooks__hooks.defaultFormat = 'YYYY-MM-DDTHH:mm:ssZ';
+
+    function toString () {
+        return this.clone().locale('en').format('ddd MMM DD YYYY HH:mm:ss [GMT]ZZ');
+    }
+
+    function moment_format__toISOString () {
+        var m = this.clone().utc();
+        if (0 < m.year() && m.year() <= 9999) {
+            if ('function' === typeof Date.prototype.toISOString) {
+                // native implementation is ~50x faster, use it when we can
+                return this.toDate().toISOString();
+            } else {
+                return formatMoment(m, 'YYYY-MM-DD[T]HH:mm:ss.SSS[Z]');
+            }
+        } else {
+            return formatMoment(m, 'YYYYYY-MM-DD[T]HH:mm:ss.SSS[Z]');
+        }
+    }
+
+    function format (inputString) {
+        var output = formatMoment(this, inputString || utils_hooks__hooks.defaultFormat);
+        return this.localeData().postformat(output);
+    }
+
+    function from (time, withoutSuffix) {
+        if (!this.isValid()) {
+            return this.localeData().invalidDate();
+        }
+        return create__createDuration({to: this, from: time}).locale(this.locale()).humanize(!withoutSuffix);
+    }
+
+    function fromNow (withoutSuffix) {
+        return this.from(local__createLocal(), withoutSuffix);
+    }
+
+    function to (time, withoutSuffix) {
+        if (!this.isValid()) {
+            return this.localeData().invalidDate();
+        }
+        return create__createDuration({from: this, to: time}).locale(this.locale()).humanize(!withoutSuffix);
+    }
+
+    function toNow (withoutSuffix) {
+        return this.to(local__createLocal(), withoutSuffix);
+    }
+
+    function locale (key) {
+        var newLocaleData;
+
+        if (key === undefined) {
+            return this._locale._abbr;
+        } else {
+            newLocaleData = locale_locales__getLocale(key);
+            if (newLocaleData != null) {
+                this._locale = newLocaleData;
+            }
+            return this;
+        }
+    }
+
+    var lang = deprecate(
+        'moment().lang() is deprecated. Instead, use moment().localeData() to get the language configuration. Use moment().locale() to change languages.',
+        function (key) {
+            if (key === undefined) {
+                return this.localeData();
+            } else {
+                return this.locale(key);
+            }
+        }
+    );
+
+    function localeData () {
+        return this._locale;
+    }
+
+    function startOf (units) {
+        units = normalizeUnits(units);
+        // the following switch intentionally omits break keywords
+        // to utilize falling through the cases.
+        switch (units) {
+        case 'year':
+            this.month(0);
+            /* falls through */
+        case 'quarter':
+        case 'month':
+            this.date(1);
+            /* falls through */
+        case 'week':
+        case 'isoWeek':
+        case 'day':
+            this.hours(0);
+            /* falls through */
+        case 'hour':
+            this.minutes(0);
+            /* falls through */
+        case 'minute':
+            this.seconds(0);
+            /* falls through */
+        case 'second':
+            this.milliseconds(0);
+        }
+
+        // weeks are a special case
+        if (units === 'week') {
+            this.weekday(0);
+        }
+        if (units === 'isoWeek') {
+            this.isoWeekday(1);
+        }
+
+        // quarters are also special
+        if (units === 'quarter') {
+            this.month(Math.floor(this.month() / 3) * 3);
+        }
+
+        return this;
+    }
+
+    function endOf (units) {
+        units = normalizeUnits(units);
+        if (units === undefined || units === 'millisecond') {
+            return this;
+        }
+        return this.startOf(units).add(1, (units === 'isoWeek' ? 'week' : units)).subtract(1, 'ms');
+    }
+
+    function to_type__valueOf () {
+        return +this._d - ((this._offset || 0) * 60000);
+    }
+
+    function unix () {
+        return Math.floor(+this / 1000);
+    }
+
+    function toDate () {
+        return this._offset ? new Date(+this) : this._d;
+    }
+
+    function toArray () {
+        var m = this;
+        return [m.year(), m.month(), m.date(), m.hour(), m.minute(), m.second(), m.millisecond()];
+    }
+
+    function toObject () {
+        var m = this;
+        return {
+            years: m.year(),
+            months: m.month(),
+            date: m.date(),
+            hours: m.hours(),
+            minutes: m.minutes(),
+            seconds: m.seconds(),
+            milliseconds: m.milliseconds()
+        };
+    }
+
+    function moment_valid__isValid () {
+        return valid__isValid(this);
+    }
+
+    function parsingFlags () {
+        return extend({}, getParsingFlags(this));
+    }
+
+    function invalidAt () {
+        return getParsingFlags(this).overflow;
+    }
+
+    addFormatToken(0, ['gg', 2], 0, function () {
+        return this.weekYear() % 100;
+    });
+
+    addFormatToken(0, ['GG', 2], 0, function () {
+        return this.isoWeekYear() % 100;
+    });
+
+    function addWeekYearFormatToken (token, getter) {
+        addFormatToken(0, [token, token.length], 0, getter);
+    }
+
+    addWeekYearFormatToken('gggg',     'weekYear');
+    addWeekYearFormatToken('ggggg',    'weekYear');
+    addWeekYearFormatToken('GGGG',  'isoWeekYear');
+    addWeekYearFormatToken('GGGGG', 'isoWeekYear');
+
+    // ALIASES
+
+    addUnitAlias('weekYear', 'gg');
+    addUnitAlias('isoWeekYear', 'GG');
+
+    // PARSING
+
+    addRegexToken('G',      matchSigned);
+    addRegexToken('g',      matchSigned);
+    addRegexToken('GG',     match1to2, match2);
+    addRegexToken('gg',     match1to2, match2);
+    addRegexToken('GGGG',   match1to4, match4);
+    addRegexToken('gggg',   match1to4, match4);
+    addRegexToken('GGGGG',  match1to6, match6);
+    addRegexToken('ggggg',  match1to6, match6);
+
+    addWeekParseToken(['gggg', 'ggggg', 'GGGG', 'GGGGG'], function (input, week, config, token) {
+        week[token.substr(0, 2)] = toInt(input);
+    });
+
+    addWeekParseToken(['gg', 'GG'], function (input, week, config, token) {
+        week[token] = utils_hooks__hooks.parseTwoDigitYear(input);
+    });
+
+    // HELPERS
+
+    function weeksInYear(year, dow, doy) {
+        return weekOfYear(local__createLocal([year, 11, 31 + dow - doy]), dow, doy).week;
+    }
+
+    // MOMENTS
+
+    function getSetWeekYear (input) {
+        var year = weekOfYear(this, this.localeData()._week.dow, this.localeData()._week.doy).year;
+        return input == null ? year : this.add((input - year), 'y');
+    }
+
+    function getSetISOWeekYear (input) {
+        var year = weekOfYear(this, 1, 4).year;
+        return input == null ? year : this.add((input - year), 'y');
+    }
+
+    function getISOWeeksInYear () {
+        return weeksInYear(this.year(), 1, 4);
+    }
+
+    function getWeeksInYear () {
+        var weekInfo = this.localeData()._week;
+        return weeksInYear(this.year(), weekInfo.dow, weekInfo.doy);
+    }
+
+    addFormatToken('Q', 0, 0, 'quarter');
+
+    // ALIASES
+
+    addUnitAlias('quarter', 'Q');
+
+    // PARSING
+
+    addRegexToken('Q', match1);
+    addParseToken('Q', function (input, array) {
+        array[MONTH] = (toInt(input) - 1) * 3;
+    });
+
+    // MOMENTS
+
+    function getSetQuarter (input) {
+        return input == null ? Math.ceil((this.month() + 1) / 3) : this.month((input - 1) * 3 + this.month() % 3);
+    }
+
+    addFormatToken('D', ['DD', 2], 'Do', 'date');
+
+    // ALIASES
+
+    addUnitAlias('date', 'D');
+
+    // PARSING
+
+    addRegexToken('D',  match1to2);
+    addRegexToken('DD', match1to2, match2);
+    addRegexToken('Do', function (isStrict, locale) {
+        return isStrict ? locale._ordinalParse : locale._ordinalParseLenient;
+    });
+
+    addParseToken(['D', 'DD'], DATE);
+    addParseToken('Do', function (input, array) {
+        array[DATE] = toInt(input.match(match1to2)[0], 10);
+    });
+
+    // MOMENTS
+
+    var getSetDayOfMonth = makeGetSet('Date', true);
+
+    addFormatToken('d', 0, 'do', 'day');
+
+    addFormatToken('dd', 0, 0, function (format) {
+        return this.localeData().weekdaysMin(this, format);
+    });
+
+    addFormatToken('ddd', 0, 0, function (format) {
+        return this.localeData().weekdaysShort(this, format);
+    });
+
+    addFormatToken('dddd', 0, 0, function (format) {
+        return this.localeData().weekdays(this, format);
+    });
+
+    addFormatToken('e', 0, 0, 'weekday');
+    addFormatToken('E', 0, 0, 'isoWeekday');
+
+    // ALIASES
+
+    addUnitAlias('day', 'd');
+    addUnitAlias('weekday', 'e');
+    addUnitAlias('isoWeekday', 'E');
+
+    // PARSING
+
+    addRegexToken('d',    match1to2);
+    addRegexToken('e',    match1to2);
+    addRegexToken('E',    match1to2);
+    addRegexToken('dd',   matchWord);
+    addRegexToken('ddd',  matchWord);
+    addRegexToken('dddd', matchWord);
+
+    addWeekParseToken(['dd', 'ddd', 'dddd'], function (input, week, config) {
+        var weekday = config._locale.weekdaysParse(input);
+        // if we didn't get a weekday name, mark the date as invalid
+        if (weekday != null) {
+            week.d = weekday;
+        } else {
+            getParsingFlags(config).invalidWeekday = input;
+        }
+    });
+
+    addWeekParseToken(['d', 'e', 'E'], function (input, week, config, token) {
+        week[token] = toInt(input);
+    });
+
+    // HELPERS
+
+    function parseWeekday(input, locale) {
+        if (typeof input !== 'string') {
+            return input;
+        }
+
+        if (!isNaN(input)) {
+            return parseInt(input, 10);
+        }
+
+        input = locale.weekdaysParse(input);
+        if (typeof input === 'number') {
+            return input;
+        }
+
+        return null;
+    }
+
+    // LOCALES
+
+    var defaultLocaleWeekdays = 'Sunday_Monday_Tuesday_Wednesday_Thursday_Friday_Saturday'.split('_');
+    function localeWeekdays (m) {
+        return this._weekdays[m.day()];
+    }
+
+    var defaultLocaleWeekdaysShort = 'Sun_Mon_Tue_Wed_Thu_Fri_Sat'.split('_');
+    function localeWeekdaysShort (m) {
+        return this._weekdaysShort[m.day()];
+    }
+
+    var defaultLocaleWeekdaysMin = 'Su_Mo_Tu_We_Th_Fr_Sa'.split('_');
+    function localeWeekdaysMin (m) {
+        return this._weekdaysMin[m.day()];
+    }
+
+    function localeWeekdaysParse (weekdayName) {
+        var i, mom, regex;
+
+        this._weekdaysParse = this._weekdaysParse || [];
+
+        for (i = 0; i < 7; i++) {
+            // make the regex if we don't have it already
+            if (!this._weekdaysParse[i]) {
+                mom = local__createLocal([2000, 1]).day(i);
+                regex = '^' + this.weekdays(mom, '') + '|^' + this.weekdaysShort(mom, '') + '|^' + this.weekdaysMin(mom, '');
+                this._weekdaysParse[i] = new RegExp(regex.replace('.', ''), 'i');
+            }
+            // test the regex
+            if (this._weekdaysParse[i].test(weekdayName)) {
+                return i;
+            }
+        }
+    }
+
+    // MOMENTS
+
+    function getSetDayOfWeek (input) {
+        var day = this._isUTC ? this._d.getUTCDay() : this._d.getDay();
+        if (input != null) {
+            input = parseWeekday(input, this.localeData());
+            return this.add(input - day, 'd');
+        } else {
+            return day;
+        }
+    }
+
+    function getSetLocaleDayOfWeek (input) {
+        var weekday = (this.day() + 7 - this.localeData()._week.dow) % 7;
+        return input == null ? weekday : this.add(input - weekday, 'd');
+    }
+
+    function getSetISODayOfWeek (input) {
+        // behaves the same as moment#day except
+        // as a getter, returns 7 instead of 0 (1-7 range instead of 0-6)
+        // as a setter, sunday should belong to the previous week.
+        return input == null ? this.day() || 7 : this.day(this.day() % 7 ? input : input - 7);
+    }
+
+    addFormatToken('H', ['HH', 2], 0, 'hour');
+    addFormatToken('h', ['hh', 2], 0, function () {
+        return this.hours() % 12 || 12;
+    });
+
+    function meridiem (token, lowercase) {
+        addFormatToken(token, 0, 0, function () {
+            return this.localeData().meridiem(this.hours(), this.minutes(), lowercase);
+        });
+    }
+
+    meridiem('a', true);
+    meridiem('A', false);
+
+    // ALIASES
+
+    addUnitAlias('hour', 'h');
+
+    // PARSING
+
+    function matchMeridiem (isStrict, locale) {
+        return locale._meridiemParse;
+    }
+
+    addRegexToken('a',  matchMeridiem);
+    addRegexToken('A',  matchMeridiem);
+    addRegexToken('H',  match1to2);
+    addRegexToken('h',  match1to2);
+    addRegexToken('HH', match1to2, match2);
+    addRegexToken('hh', match1to2, match2);
+
+    addParseToken(['H', 'HH'], HOUR);
+    addParseToken(['a', 'A'], function (input, array, config) {
+        config._isPm = config._locale.isPM(input);
+        config._meridiem = input;
+    });
+    addParseToken(['h', 'hh'], function (input, array, config) {
+        array[HOUR] = toInt(input);
+        getParsingFlags(config).bigHour = true;
+    });
+
+    // LOCALES
+
+    function localeIsPM (input) {
+        // IE8 Quirks Mode & IE7 Standards Mode do not allow accessing strings like arrays
+        // Using charAt should be more compatible.
+        return ((input + '').toLowerCase().charAt(0) === 'p');
+    }
+
+    var defaultLocaleMeridiemParse = /[ap]\.?m?\.?/i;
+    function localeMeridiem (hours, minutes, isLower) {
+        if (hours > 11) {
+            return isLower ? 'pm' : 'PM';
+        } else {
+            return isLower ? 'am' : 'AM';
+        }
+    }
+
+
+    // MOMENTS
+
+    // Setting the hour should keep the time, because the user explicitly
+    // specified which hour he wants. So trying to maintain the same hour (in
+    // a new timezone) makes sense. Adding/subtracting hours does not follow
+    // this rule.
+    var getSetHour = makeGetSet('Hours', true);
+
+    addFormatToken('m', ['mm', 2], 0, 'minute');
+
+    // ALIASES
+
+    addUnitAlias('minute', 'm');
+
+    // PARSING
+
+    addRegexToken('m',  match1to2);
+    addRegexToken('mm', match1to2, match2);
+    addParseToken(['m', 'mm'], MINUTE);
+
+    // MOMENTS
+
+    var getSetMinute = makeGetSet('Minutes', false);
+
+    addFormatToken('s', ['ss', 2], 0, 'second');
+
+    // ALIASES
+
+    addUnitAlias('second', 's');
+
+    // PARSING
+
+    addRegexToken('s',  match1to2);
+    addRegexToken('ss', match1to2, match2);
+    addParseToken(['s', 'ss'], SECOND);
+
+    // MOMENTS
+
+    var getSetSecond = makeGetSet('Seconds', false);
+
+    addFormatToken('S', 0, 0, function () {
+        return ~~(this.millisecond() / 100);
+    });
+
+    addFormatToken(0, ['SS', 2], 0, function () {
+        return ~~(this.millisecond() / 10);
+    });
+
+    addFormatToken(0, ['SSS', 3], 0, 'millisecond');
+    addFormatToken(0, ['SSSS', 4], 0, function () {
+        return this.millisecond() * 10;
+    });
+    addFormatToken(0, ['SSSSS', 5], 0, function () {
+        return this.millisecond() * 100;
+    });
+    addFormatToken(0, ['SSSSSS', 6], 0, function () {
+        return this.millisecond() * 1000;
+    });
+    addFormatToken(0, ['SSSSSSS', 7], 0, function () {
+        return this.millisecond() * 10000;
+    });
+    addFormatToken(0, ['SSSSSSSS', 8], 0, function () {
+        return this.millisecond() * 100000;
+    });
+    addFormatToken(0, ['SSSSSSSSS', 9], 0, function () {
+        return this.millisecond() * 1000000;
+    });
+
+
+    // ALIASES
+
+    addUnitAlias('millisecond', 'ms');
+
+    // PARSING
+
+    addRegexToken('S',    match1to3, match1);
+    addRegexToken('SS',   match1to3, match2);
+    addRegexToken('SSS',  match1to3, match3);
+
+    var token;
+    for (token = 'SSSS'; token.length <= 9; token += 'S') {
+        addRegexToken(token, matchUnsigned);
+    }
+
+    function parseMs(input, array) {
+        array[MILLISECOND] = toInt(('0.' + input) * 1000);
+    }
+
+    for (token = 'S'; token.length <= 9; token += 'S') {
+        addParseToken(token, parseMs);
+    }
+    // MOMENTS
+
+    var getSetMillisecond = makeGetSet('Milliseconds', false);
+
+    addFormatToken('z',  0, 0, 'zoneAbbr');
+    addFormatToken('zz', 0, 0, 'zoneName');
+
+    // MOMENTS
+
+    function getZoneAbbr () {
+        return this._isUTC ? 'UTC' : '';
+    }
+
+    function getZoneName () {
+        return this._isUTC ? 'Coordinated Universal Time' : '';
+    }
+
+    var momentPrototype__proto = Moment.prototype;
+
+    momentPrototype__proto.add          = add_subtract__add;
+    momentPrototype__proto.calendar     = moment_calendar__calendar;
+    momentPrototype__proto.clone        = clone;
+    momentPrototype__proto.diff         = diff;
+    momentPrototype__proto.endOf        = endOf;
+    momentPrototype__proto.format       = format;
+    momentPrototype__proto.from         = from;
+    momentPrototype__proto.fromNow      = fromNow;
+    momentPrototype__proto.to           = to;
+    momentPrototype__proto.toNow        = toNow;
+    momentPrototype__proto.get          = getSet;
+    momentPrototype__proto.invalidAt    = invalidAt;
+    momentPrototype__proto.isAfter      = isAfter;
+    momentPrototype__proto.isBefore     = isBefore;
+    momentPrototype__proto.isBetween    = isBetween;
+    momentPrototype__proto.isSame       = isSame;
+    momentPrototype__proto.isValid      = moment_valid__isValid;
+    momentPrototype__proto.lang         = lang;
+    momentPrototype__proto.locale       = locale;
+    momentPrototype__proto.localeData   = localeData;
+    momentPrototype__proto.max          = prototypeMax;
+    momentPrototype__proto.min          = prototypeMin;
+    momentPrototype__proto.parsingFlags = parsingFlags;
+    momentPrototype__proto.set          = getSet;
+    momentPrototype__proto.startOf      = startOf;
+    momentPrototype__proto.subtract     = add_subtract__subtract;
+    momentPrototype__proto.toArray      = toArray;
+    momentPrototype__proto.toObject     = toObject;
+    momentPrototype__proto.toDate       = toDate;
+    momentPrototype__proto.toISOString  = moment_format__toISOString;
+    momentPrototype__proto.toJSON       = moment_format__toISOString;
+    momentPrototype__proto.toString     = toString;
+    momentPrototype__proto.unix         = unix;
+    momentPrototype__proto.valueOf      = to_type__valueOf;
+
+    // Year
+    momentPrototype__proto.year       = getSetYear;
+    momentPrototype__proto.isLeapYear = getIsLeapYear;
+
+    // Week Year
+    momentPrototype__proto.weekYear    = getSetWeekYear;
+    momentPrototype__proto.isoWeekYear = getSetISOWeekYear;
+
+    // Quarter
+    momentPrototype__proto.quarter = momentPrototype__proto.quarters = getSetQuarter;
+
+    // Month
+    momentPrototype__proto.month       = getSetMonth;
+    momentPrototype__proto.daysInMonth = getDaysInMonth;
+
+    // Week
+    momentPrototype__proto.week           = momentPrototype__proto.weeks        = getSetWeek;
+    momentPrototype__proto.isoWeek        = momentPrototype__proto.isoWeeks     = getSetISOWeek;
+    momentPrototype__proto.weeksInYear    = getWeeksInYear;
+    momentPrototype__proto.isoWeeksInYear = getISOWeeksInYear;
+
+    // Day
+    momentPrototype__proto.date       = getSetDayOfMonth;
+    momentPrototype__proto.day        = momentPrototype__proto.days             = getSetDayOfWeek;
+    momentPrototype__proto.weekday    = getSetLocaleDayOfWeek;
+    momentPrototype__proto.isoWeekday = getSetISODayOfWeek;
+    momentPrototype__proto.dayOfYear  = getSetDayOfYear;
+
+    // Hour
+    momentPrototype__proto.hour = momentPrototype__proto.hours = getSetHour;
+
+    // Minute
+    momentPrototype__proto.minute = momentPrototype__proto.minutes = getSetMinute;
+
+    // Second
+    momentPrototype__proto.second = momentPrototype__proto.seconds = getSetSecond;
+
+    // Millisecond
+    momentPrototype__proto.millisecond = momentPrototype__proto.milliseconds = getSetMillisecond;
+
+    // Offset
+    momentPrototype__proto.utcOffset            = getSetOffset;
+    momentPrototype__proto.utc                  = setOffsetToUTC;
+    momentPrototype__proto.local                = setOffsetToLocal;
+    momentPrototype__proto.parseZone            = setOffsetToParsedOffset;
+    momentPrototype__proto.hasAlignedHourOffset = hasAlignedHourOffset;
+    momentPrototype__proto.isDST                = isDaylightSavingTime;
+    momentPrototype__proto.isDSTShifted         = isDaylightSavingTimeShifted;
+    momentPrototype__proto.isLocal              = isLocal;
+    momentPrototype__proto.isUtcOffset          = isUtcOffset;
+    momentPrototype__proto.isUtc                = isUtc;
+    momentPrototype__proto.isUTC                = isUtc;
+
+    // Timezone
+    momentPrototype__proto.zoneAbbr = getZoneAbbr;
+    momentPrototype__proto.zoneName = getZoneName;
+
+    // Deprecations
+    momentPrototype__proto.dates  = deprecate('dates accessor is deprecated. Use date instead.', getSetDayOfMonth);
+    momentPrototype__proto.months = deprecate('months accessor is deprecated. Use month instead', getSetMonth);
+    momentPrototype__proto.years  = deprecate('years accessor is deprecated. Use year instead', getSetYear);
+    momentPrototype__proto.zone   = deprecate('moment().zone is deprecated, use moment().utcOffset instead. https://github.com/moment/moment/issues/1779', getSetZone);
+
+    var momentPrototype = momentPrototype__proto;
+
+    function moment__createUnix (input) {
+        return local__createLocal(input * 1000);
+    }
+
+    function moment__createInZone () {
+        return local__createLocal.apply(null, arguments).parseZone();
+    }
+
+    var defaultCalendar = {
+        sameDay : '[Today at] LT',
+        nextDay : '[Tomorrow at] LT',
+        nextWeek : 'dddd [at] LT',
+        lastDay : '[Yesterday at] LT',
+        lastWeek : '[Last] dddd [at] LT',
+        sameElse : 'L'
+    };
+
+    function locale_calendar__calendar (key, mom, now) {
+        var output = this._calendar[key];
+        return typeof output === 'function' ? output.call(mom, now) : output;
+    }
+
+    var defaultLongDateFormat = {
+        LTS  : 'h:mm:ss A',
+        LT   : 'h:mm A',
+        L    : 'MM/DD/YYYY',
+        LL   : 'MMMM D, YYYY',
+        LLL  : 'MMMM D, YYYY h:mm A',
+        LLLL : 'dddd, MMMM D, YYYY h:mm A'
+    };
+
+    function longDateFormat (key) {
+        var format = this._longDateFormat[key],
+            formatUpper = this._longDateFormat[key.toUpperCase()];
+
+        if (format || !formatUpper) {
+            return format;
+        }
+
+        this._longDateFormat[key] = formatUpper.replace(/MMMM|MM|DD|dddd/g, function (val) {
+            return val.slice(1);
+        });
+
+        return this._longDateFormat[key];
+    }
+
+    var defaultInvalidDate = 'Invalid date';
+
+    function invalidDate () {
+        return this._invalidDate;
+    }
+
+    var defaultOrdinal = '%d';
+    var defaultOrdinalParse = /\d{1,2}/;
+
+    function ordinal (number) {
+        return this._ordinal.replace('%d', number);
+    }
+
+    function preParsePostFormat (string) {
+        return string;
+    }
+
+    var defaultRelativeTime = {
+        future : 'in %s',
+        past   : '%s ago',
+        s  : 'a few seconds',
+        m  : 'a minute',
+        mm : '%d minutes',
+        h  : 'an hour',
+        hh : '%d hours',
+        d  : 'a day',
+        dd : '%d days',
+        M  : 'a month',
+        MM : '%d months',
+        y  : 'a year',
+        yy : '%d years'
+    };
+
+    function relative__relativeTime (number, withoutSuffix, string, isFuture) {
+        var output = this._relativeTime[string];
+        return (typeof output === 'function') ?
+            output(number, withoutSuffix, string, isFuture) :
+            output.replace(/%d/i, number);
+    }
+
+    function pastFuture (diff, output) {
+        var format = this._relativeTime[diff > 0 ? 'future' : 'past'];
+        return typeof format === 'function' ? format(output) : format.replace(/%s/i, output);
+    }
+
+    function locale_set__set (config) {
+        var prop, i;
+        for (i in config) {
+            prop = config[i];
+            if (typeof prop === 'function') {
+                this[i] = prop;
+            } else {
+                this['_' + i] = prop;
+            }
+        }
+        // Lenient ordinal parsing accepts just a number in addition to
+        // number + (possibly) stuff coming from _ordinalParseLenient.
+        this._ordinalParseLenient = new RegExp(this._ordinalParse.source + '|' + (/\d{1,2}/).source);
+    }
+
+    var prototype__proto = Locale.prototype;
+
+    prototype__proto._calendar       = defaultCalendar;
+    prototype__proto.calendar        = locale_calendar__calendar;
+    prototype__proto._longDateFormat = defaultLongDateFormat;
+    prototype__proto.longDateFormat  = longDateFormat;
+    prototype__proto._invalidDate    = defaultInvalidDate;
+    prototype__proto.invalidDate     = invalidDate;
+    prototype__proto._ordinal        = defaultOrdinal;
+    prototype__proto.ordinal         = ordinal;
+    prototype__proto._ordinalParse   = defaultOrdinalParse;
+    prototype__proto.preparse        = preParsePostFormat;
+    prototype__proto.postformat      = preParsePostFormat;
+    prototype__proto._relativeTime   = defaultRelativeTime;
+    prototype__proto.relativeTime    = relative__relativeTime;
+    prototype__proto.pastFuture      = pastFuture;
+    prototype__proto.set             = locale_set__set;
+
+    // Month
+    prototype__proto.months       =        localeMonths;
+    prototype__proto._months      = defaultLocaleMonths;
+    prototype__proto.monthsShort  =        localeMonthsShort;
+    prototype__proto._monthsShort = defaultLocaleMonthsShort;
+    prototype__proto.monthsParse  =        localeMonthsParse;
+
+    // Week
+    prototype__proto.week = localeWeek;
+    prototype__proto._week = defaultLocaleWeek;
+    prototype__proto.firstDayOfYear = localeFirstDayOfYear;
+    prototype__proto.firstDayOfWeek = localeFirstDayOfWeek;
+
+    // Day of Week
+    prototype__proto.weekdays       =        localeWeekdays;
+    prototype__proto._weekdays      = defaultLocaleWeekdays;
+    prototype__proto.weekdaysMin    =        localeWeekdaysMin;
+    prototype__proto._weekdaysMin   = defaultLocaleWeekdaysMin;
+    prototype__proto.weekdaysShort  =        localeWeekdaysShort;
+    prototype__proto._weekdaysShort = defaultLocaleWeekdaysShort;
+    prototype__proto.weekdaysParse  =        localeWeekdaysParse;
+
+    // Hours
+    prototype__proto.isPM = localeIsPM;
+    prototype__proto._meridiemParse = defaultLocaleMeridiemParse;
+    prototype__proto.meridiem = localeMeridiem;
+
+    function lists__get (format, index, field, setter) {
+        var locale = locale_locales__getLocale();
+        var utc = create_utc__createUTC().set(setter, index);
+        return locale[field](utc, format);
+    }
+
+    function list (format, index, field, count, setter) {
+        if (typeof format === 'number') {
+            index = format;
+            format = undefined;
+        }
+
+        format = format || '';
+
+        if (index != null) {
+            return lists__get(format, index, field, setter);
+        }
+
+        var i;
+        var out = [];
+        for (i = 0; i < count; i++) {
+            out[i] = lists__get(format, i, field, setter);
+        }
+        return out;
+    }
+
+    function lists__listMonths (format, index) {
+        return list(format, index, 'months', 12, 'month');
+    }
+
+    function lists__listMonthsShort (format, index) {
+        return list(format, index, 'monthsShort', 12, 'month');
+    }
+
+    function lists__listWeekdays (format, index) {
+        return list(format, index, 'weekdays', 7, 'day');
+    }
+
+    function lists__listWeekdaysShort (format, index) {
+        return list(format, index, 'weekdaysShort', 7, 'day');
+    }
+
+    function lists__listWeekdaysMin (format, index) {
+        return list(format, index, 'weekdaysMin', 7, 'day');
+    }
+
+    locale_locales__getSetGlobalLocale('en', {
+        ordinalParse: /\d{1,2}(th|st|nd|rd)/,
+        ordinal : function (number) {
+            var b = number % 10,
+                output = (toInt(number % 100 / 10) === 1) ? 'th' :
+                (b === 1) ? 'st' :
+                (b === 2) ? 'nd' :
+                (b === 3) ? 'rd' : 'th';
+            return number + output;
+        }
+    });
+
+    // Side effect imports
+    utils_hooks__hooks.lang = deprecate('moment.lang is deprecated. Use moment.locale instead.', locale_locales__getSetGlobalLocale);
+    utils_hooks__hooks.langData = deprecate('moment.langData is deprecated. Use moment.localeData instead.', locale_locales__getLocale);
+
+    var mathAbs = Math.abs;
+
+    function duration_abs__abs () {
+        var data           = this._data;
+
+        this._milliseconds = mathAbs(this._milliseconds);
+        this._days         = mathAbs(this._days);
+        this._months       = mathAbs(this._months);
+
+        data.milliseconds  = mathAbs(data.milliseconds);
+        data.seconds       = mathAbs(data.seconds);
+        data.minutes       = mathAbs(data.minutes);
+        data.hours         = mathAbs(data.hours);
+        data.months        = mathAbs(data.months);
+        data.years         = mathAbs(data.years);
+
+        return this;
+    }
+
+    function duration_add_subtract__addSubtract (duration, input, value, direction) {
+        var other = create__createDuration(input, value);
+
+        duration._milliseconds += direction * other._milliseconds;
+        duration._days         += direction * other._days;
+        duration._months       += direction * other._months;
+
+        return duration._bubble();
+    }
+
+    // supports only 2.0-style add(1, 's') or add(duration)
+    function duration_add_subtract__add (input, value) {
+        return duration_add_subtract__addSubtract(this, input, value, 1);
+    }
+
+    // supports only 2.0-style subtract(1, 's') or subtract(duration)
+    function duration_add_subtract__subtract (input, value) {
+        return duration_add_subtract__addSubtract(this, input, value, -1);
+    }
+
+    function absCeil (number) {
+        if (number < 0) {
+            return Math.floor(number);
+        } else {
+            return Math.ceil(number);
+        }
+    }
+
+    function bubble () {
+        var milliseconds = this._milliseconds;
+        var days         = this._days;
+        var months       = this._months;
+        var data         = this._data;
+        var seconds, minutes, hours, years, monthsFromDays;
+
+        // if we have a mix of positive and negative values, bubble down first
+        // check: https://github.com/moment/moment/issues/2166
+        if (!((milliseconds >= 0 && days >= 0 && months >= 0) ||
+                (milliseconds <= 0 && days <= 0 && months <= 0))) {
+            milliseconds += absCeil(monthsToDays(months) + days) * 864e5;
+            days = 0;
+            months = 0;
+        }
+
+        // The following code bubbles up values, see the tests for
+        // examples of what that means.
+        data.milliseconds = milliseconds % 1000;
+
+        seconds           = absFloor(milliseconds / 1000);
+        data.seconds      = seconds % 60;
+
+        minutes           = absFloor(seconds / 60);
+        data.minutes      = minutes % 60;
+
+        hours             = absFloor(minutes / 60);
+        data.hours        = hours % 24;
+
+        days += absFloor(hours / 24);
+
+        // convert days to months
+        monthsFromDays = absFloor(daysToMonths(days));
+        months += monthsFromDays;
+        days -= absCeil(monthsToDays(monthsFromDays));
+
+        // 12 months -> 1 year
+        years = absFloor(months / 12);
+        months %= 12;
+
+        data.days   = days;
+        data.months = months;
+        data.years  = years;
+
+        return this;
+    }
+
+    function daysToMonths (days) {
+        // 400 years have 146097 days (taking into account leap year rules)
+        // 400 years have 12 months === 4800
+        return days * 4800 / 146097;
+    }
+
+    function monthsToDays (months) {
+        // the reverse of daysToMonths
+        return months * 146097 / 4800;
+    }
+
+    function as (units) {
+        var days;
+        var months;
+        var milliseconds = this._milliseconds;
+
+        units = normalizeUnits(units);
+
+        if (units === 'month' || units === 'year') {
+            days   = this._days   + milliseconds / 864e5;
+            months = this._months + daysToMonths(days);
+            return units === 'month' ? months : months / 12;
+        } else {
+            // handle milliseconds separately because of floating point math errors (issue #1867)
+            days = this._days + Math.round(monthsToDays(this._months));
+            switch (units) {
+                case 'week'   : return days / 7     + milliseconds / 6048e5;
+                case 'day'    : return days         + milliseconds / 864e5;
+                case 'hour'   : return days * 24    + milliseconds / 36e5;
+                case 'minute' : return days * 1440  + milliseconds / 6e4;
+                case 'second' : return days * 86400 + milliseconds / 1000;
+                // Math.floor prevents floating point math errors here
+                case 'millisecond': return Math.floor(days * 864e5) + milliseconds;
+                default: throw new Error('Unknown unit ' + units);
+            }
+        }
+    }
+
+    // TODO: Use this.as('ms')?
+    function duration_as__valueOf () {
+        return (
+            this._milliseconds +
+            this._days * 864e5 +
+            (this._months % 12) * 2592e6 +
+            toInt(this._months / 12) * 31536e6
+        );
+    }
+
+    function makeAs (alias) {
+        return function () {
+            return this.as(alias);
+        };
+    }
+
+    var asMilliseconds = makeAs('ms');
+    var asSeconds      = makeAs('s');
+    var asMinutes      = makeAs('m');
+    var asHours        = makeAs('h');
+    var asDays         = makeAs('d');
+    var asWeeks        = makeAs('w');
+    var asMonths       = makeAs('M');
+    var asYears        = makeAs('y');
+
+    function duration_get__get (units) {
+        units = normalizeUnits(units);
+        return this[units + 's']();
+    }
+
+    function makeGetter(name) {
+        return function () {
+            return this._data[name];
+        };
+    }
+
+    var milliseconds = makeGetter('milliseconds');
+    var seconds      = makeGetter('seconds');
+    var minutes      = makeGetter('minutes');
+    var hours        = makeGetter('hours');
+    var days         = makeGetter('days');
+    var months       = makeGetter('months');
+    var years        = makeGetter('years');
+
+    function weeks () {
+        return absFloor(this.days() / 7);
+    }
+
+    var round = Math.round;
+    var thresholds = {
+        s: 45,  // seconds to minute
+        m: 45,  // minutes to hour
+        h: 22,  // hours to day
+        d: 26,  // days to month
+        M: 11   // months to year
+    };
+
+    // helper function for moment.fn.from, moment.fn.fromNow, and moment.duration.fn.humanize
+    function substituteTimeAgo(string, number, withoutSuffix, isFuture, locale) {
+        return locale.relativeTime(number || 1, !!withoutSuffix, string, isFuture);
+    }
+
+    function duration_humanize__relativeTime (posNegDuration, withoutSuffix, locale) {
+        var duration = create__createDuration(posNegDuration).abs();
+        var seconds  = round(duration.as('s'));
+        var minutes  = round(duration.as('m'));
+        var hours    = round(duration.as('h'));
+        var days     = round(duration.as('d'));
+        var months   = round(duration.as('M'));
+        var years    = round(duration.as('y'));
+
+        var a = seconds < thresholds.s && ['s', seconds]  ||
+                minutes === 1          && ['m']           ||
+                minutes < thresholds.m && ['mm', minutes] ||
+                hours   === 1          && ['h']           ||
+                hours   < thresholds.h && ['hh', hours]   ||
+                days    === 1          && ['d']           ||
+                days    < thresholds.d && ['dd', days]    ||
+                months  === 1          && ['M']           ||
+                months  < thresholds.M && ['MM', months]  ||
+                years   === 1          && ['y']           || ['yy', years];
+
+        a[2] = withoutSuffix;
+        a[3] = +posNegDuration > 0;
+        a[4] = locale;
+        return substituteTimeAgo.apply(null, a);
+    }
+
+    // This function allows you to set a threshold for relative time strings
+    function duration_humanize__getSetRelativeTimeThreshold (threshold, limit) {
+        if (thresholds[threshold] === undefined) {
+            return false;
+        }
+        if (limit === undefined) {
+            return thresholds[threshold];
+        }
+        thresholds[threshold] = limit;
+        return true;
+    }
+
+    function humanize (withSuffix) {
+        var locale = this.localeData();
+        var output = duration_humanize__relativeTime(this, !withSuffix, locale);
+
+        if (withSuffix) {
+            output = locale.pastFuture(+this, output);
+        }
+
+        return locale.postformat(output);
+    }
+
+    var iso_string__abs = Math.abs;
+
+    function iso_string__toISOString() {
+        // for ISO strings we do not use the normal bubbling rules:
+        //  * milliseconds bubble up until they become hours
+        //  * days do not bubble at all
+        //  * months bubble up until they become years
+        // This is because there is no context-free conversion between hours and days
+        // (think of clock changes)
+        // and also not between days and months (28-31 days per month)
+        var seconds = iso_string__abs(this._milliseconds) / 1000;
+        var days         = iso_string__abs(this._days);
+        var months       = iso_string__abs(this._months);
+        var minutes, hours, years;
+
+        // 3600 seconds -> 60 minutes -> 1 hour
+        minutes           = absFloor(seconds / 60);
+        hours             = absFloor(minutes / 60);
+        seconds %= 60;
+        minutes %= 60;
+
+        // 12 months -> 1 year
+        years  = absFloor(months / 12);
+        months %= 12;
+
+
+        // inspired by https://github.com/dordille/moment-isoduration/blob/master/moment.isoduration.js
+        var Y = years;
+        var M = months;
+        var D = days;
+        var h = hours;
+        var m = minutes;
+        var s = seconds;
+        var total = this.asSeconds();
+
+        if (!total) {
+            // this is the same as C#'s (Noda) and python (isodate)...
+            // but not other JS (goog.date)
+            return 'P0D';
+        }
+
+        return (total < 0 ? '-' : '') +
+            'P' +
+            (Y ? Y + 'Y' : '') +
+            (M ? M + 'M' : '') +
+            (D ? D + 'D' : '') +
+            ((h || m || s) ? 'T' : '') +
+            (h ? h + 'H' : '') +
+            (m ? m + 'M' : '') +
+            (s ? s + 'S' : '');
+    }
+
+    var duration_prototype__proto = Duration.prototype;
+
+    duration_prototype__proto.abs            = duration_abs__abs;
+    duration_prototype__proto.add            = duration_add_subtract__add;
+    duration_prototype__proto.subtract       = duration_add_subtract__subtract;
+    duration_prototype__proto.as             = as;
+    duration_prototype__proto.asMilliseconds = asMilliseconds;
+    duration_prototype__proto.asSeconds      = asSeconds;
+    duration_prototype__proto.asMinutes      = asMinutes;
+    duration_prototype__proto.asHours        = asHours;
+    duration_prototype__proto.asDays         = asDays;
+    duration_prototype__proto.asWeeks        = asWeeks;
+    duration_prototype__proto.asMonths       = asMonths;
+    duration_prototype__proto.asYears        = asYears;
+    duration_prototype__proto.valueOf        = duration_as__valueOf;
+    duration_prototype__proto._bubble        = bubble;
+    duration_prototype__proto.get            = duration_get__get;
+    duration_prototype__proto.milliseconds   = milliseconds;
+    duration_prototype__proto.seconds        = seconds;
+    duration_prototype__proto.minutes        = minutes;
+    duration_prototype__proto.hours          = hours;
+    duration_prototype__proto.days           = days;
+    duration_prototype__proto.weeks          = weeks;
+    duration_prototype__proto.months         = months;
+    duration_prototype__proto.years          = years;
+    duration_prototype__proto.humanize       = humanize;
+    duration_prototype__proto.toISOString    = iso_string__toISOString;
+    duration_prototype__proto.toString       = iso_string__toISOString;
+    duration_prototype__proto.toJSON         = iso_string__toISOString;
+    duration_prototype__proto.locale         = locale;
+    duration_prototype__proto.localeData     = localeData;
+
+    // Deprecations
+    duration_prototype__proto.toIsoString = deprecate('toIsoString() is deprecated. Please use toISOString() instead (notice the capitals)', iso_string__toISOString);
+    duration_prototype__proto.lang = lang;
+
+    // Side effect imports
+
+    addFormatToken('X', 0, 0, 'unix');
+    addFormatToken('x', 0, 0, 'valueOf');
+
+    // PARSING
+
+    addRegexToken('x', matchSigned);
+    addRegexToken('X', matchTimestamp);
+    addParseToken('X', function (input, array, config) {
+        config._d = new Date(parseFloat(input, 10) * 1000);
+    });
+    addParseToken('x', function (input, array, config) {
+        config._d = new Date(toInt(input));
+    });
+
+    // Side effect imports
+
+
+    utils_hooks__hooks.version = '2.10.6';
+
+    setHookCallback(local__createLocal);
+
+    utils_hooks__hooks.fn                    = momentPrototype;
+    utils_hooks__hooks.min                   = min;
+    utils_hooks__hooks.max                   = max;
+    utils_hooks__hooks.utc                   = create_utc__createUTC;
+    utils_hooks__hooks.unix                  = moment__createUnix;
+    utils_hooks__hooks.months                = lists__listMonths;
+    utils_hooks__hooks.isDate                = isDate;
+    utils_hooks__hooks.locale                = locale_locales__getSetGlobalLocale;
+    utils_hooks__hooks.invalid               = valid__createInvalid;
+    utils_hooks__hooks.duration              = create__createDuration;
+    utils_hooks__hooks.isMoment              = isMoment;
+    utils_hooks__hooks.weekdays              = lists__listWeekdays;
+    utils_hooks__hooks.parseZone             = moment__createInZone;
+    utils_hooks__hooks.localeData            = locale_locales__getLocale;
+    utils_hooks__hooks.isDuration            = isDuration;
+    utils_hooks__hooks.monthsShort           = lists__listMonthsShort;
+    utils_hooks__hooks.weekdaysMin           = lists__listWeekdaysMin;
+    utils_hooks__hooks.defineLocale          = defineLocale;
+    utils_hooks__hooks.weekdaysShort         = lists__listWeekdaysShort;
+    utils_hooks__hooks.normalizeUnits        = normalizeUnits;
+    utils_hooks__hooks.relativeTimeThreshold = duration_humanize__getSetRelativeTimeThreshold;
+
+    var _moment = utils_hooks__hooks;
+
+    return _moment;
+
+}));
+},{}],36:[function(require,module,exports){
 'use strict';
 
 module.exports = require('react/lib/ReactDOM');
 
-},{"react/lib/ReactDOM":70}],36:[function(require,module,exports){
+},{"react/lib/ReactDOM":71}],37:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -16497,7 +17903,7 @@ var AutoFocusUtils = {
 };
 
 module.exports = AutoFocusUtils;
-},{"./ReactMount":100,"./findDOMNode":143,"fbjs/lib/focusNode":15}],37:[function(require,module,exports){
+},{"./ReactMount":101,"./findDOMNode":144,"fbjs/lib/focusNode":15}],38:[function(require,module,exports){
 /**
  * Copyright 2013-2015 Facebook, Inc.
  * All rights reserved.
@@ -16903,7 +18309,7 @@ var BeforeInputEventPlugin = {
 };
 
 module.exports = BeforeInputEventPlugin;
-},{"./EventConstants":49,"./EventPropagators":53,"./FallbackCompositionState":54,"./SyntheticCompositionEvent":125,"./SyntheticInputEvent":129,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/keyOf":25}],38:[function(require,module,exports){
+},{"./EventConstants":50,"./EventPropagators":54,"./FallbackCompositionState":55,"./SyntheticCompositionEvent":126,"./SyntheticInputEvent":130,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/keyOf":25}],39:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -17043,7 +18449,7 @@ var CSSProperty = {
 };
 
 module.exports = CSSProperty;
-},{}],39:[function(require,module,exports){
+},{}],40:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -17221,7 +18627,7 @@ ReactPerf.measureMethods(CSSPropertyOperations, 'CSSPropertyOperations', {
 
 module.exports = CSSPropertyOperations;
 }).call(this,require('_process'))
-},{"./CSSProperty":38,"./ReactPerf":106,"./dangerousStyleValue":140,"_process":2,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/camelizeStyleName":9,"fbjs/lib/hyphenateStyleName":20,"fbjs/lib/memoizeStringOnly":27,"fbjs/lib/warning":32}],40:[function(require,module,exports){
+},{"./CSSProperty":39,"./ReactPerf":107,"./dangerousStyleValue":141,"_process":2,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/camelizeStyleName":9,"fbjs/lib/hyphenateStyleName":20,"fbjs/lib/memoizeStringOnly":27,"fbjs/lib/warning":32}],41:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -17317,7 +18723,7 @@ PooledClass.addPoolingTo(CallbackQueue);
 
 module.exports = CallbackQueue;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./PooledClass":58,"_process":2,"fbjs/lib/invariant":21}],41:[function(require,module,exports){
+},{"./Object.assign":58,"./PooledClass":59,"_process":2,"fbjs/lib/invariant":21}],42:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -17639,7 +19045,7 @@ var ChangeEventPlugin = {
 };
 
 module.exports = ChangeEventPlugin;
-},{"./EventConstants":49,"./EventPluginHub":50,"./EventPropagators":53,"./ReactUpdates":118,"./SyntheticEvent":127,"./getEventTarget":149,"./isEventSupported":154,"./isTextInputElement":155,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/keyOf":25}],42:[function(require,module,exports){
+},{"./EventConstants":50,"./EventPluginHub":51,"./EventPropagators":54,"./ReactUpdates":119,"./SyntheticEvent":128,"./getEventTarget":150,"./isEventSupported":155,"./isTextInputElement":156,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/keyOf":25}],43:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -17663,7 +19069,7 @@ var ClientReactRootIndex = {
 };
 
 module.exports = ClientReactRootIndex;
-},{}],43:[function(require,module,exports){
+},{}],44:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -17795,7 +19201,7 @@ ReactPerf.measureMethods(DOMChildrenOperations, 'DOMChildrenOperations', {
 
 module.exports = DOMChildrenOperations;
 }).call(this,require('_process'))
-},{"./Danger":46,"./ReactMultiChildUpdateTypes":102,"./ReactPerf":106,"./setInnerHTML":159,"./setTextContent":160,"_process":2,"fbjs/lib/invariant":21}],44:[function(require,module,exports){
+},{"./Danger":47,"./ReactMultiChildUpdateTypes":103,"./ReactPerf":107,"./setInnerHTML":160,"./setTextContent":161,"_process":2,"fbjs/lib/invariant":21}],45:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -18032,7 +19438,7 @@ var DOMProperty = {
 
 module.exports = DOMProperty;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/invariant":21}],45:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/invariant":21}],46:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -18260,7 +19666,7 @@ ReactPerf.measureMethods(DOMPropertyOperations, 'DOMPropertyOperations', {
 
 module.exports = DOMPropertyOperations;
 }).call(this,require('_process'))
-},{"./DOMProperty":44,"./ReactPerf":106,"./quoteAttributeValueForBrowser":157,"_process":2,"fbjs/lib/warning":32}],46:[function(require,module,exports){
+},{"./DOMProperty":45,"./ReactPerf":107,"./quoteAttributeValueForBrowser":158,"_process":2,"fbjs/lib/warning":32}],47:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -18408,7 +19814,7 @@ var Danger = {
 
 module.exports = Danger;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/createNodesFromMarkup":12,"fbjs/lib/emptyFunction":13,"fbjs/lib/getMarkupWrap":17,"fbjs/lib/invariant":21}],47:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/createNodesFromMarkup":12,"fbjs/lib/emptyFunction":13,"fbjs/lib/getMarkupWrap":17,"fbjs/lib/invariant":21}],48:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -18436,7 +19842,7 @@ var keyOf = require('fbjs/lib/keyOf');
 var DefaultEventPluginOrder = [keyOf({ ResponderEventPlugin: null }), keyOf({ SimpleEventPlugin: null }), keyOf({ TapEventPlugin: null }), keyOf({ EnterLeaveEventPlugin: null }), keyOf({ ChangeEventPlugin: null }), keyOf({ SelectEventPlugin: null }), keyOf({ BeforeInputEventPlugin: null })];
 
 module.exports = DefaultEventPluginOrder;
-},{"fbjs/lib/keyOf":25}],48:[function(require,module,exports){
+},{"fbjs/lib/keyOf":25}],49:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -18561,7 +19967,7 @@ var EnterLeaveEventPlugin = {
 };
 
 module.exports = EnterLeaveEventPlugin;
-},{"./EventConstants":49,"./EventPropagators":53,"./ReactMount":100,"./SyntheticMouseEvent":131,"fbjs/lib/keyOf":25}],49:[function(require,module,exports){
+},{"./EventConstants":50,"./EventPropagators":54,"./ReactMount":101,"./SyntheticMouseEvent":132,"fbjs/lib/keyOf":25}],50:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -18654,7 +20060,7 @@ var EventConstants = {
 };
 
 module.exports = EventConstants;
-},{"fbjs/lib/keyMirror":24}],50:[function(require,module,exports){
+},{"fbjs/lib/keyMirror":24}],51:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -18936,7 +20342,7 @@ var EventPluginHub = {
 
 module.exports = EventPluginHub;
 }).call(this,require('_process'))
-},{"./EventPluginRegistry":51,"./EventPluginUtils":52,"./ReactErrorUtils":91,"./accumulateInto":137,"./forEachAccumulated":145,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],51:[function(require,module,exports){
+},{"./EventPluginRegistry":52,"./EventPluginUtils":53,"./ReactErrorUtils":92,"./accumulateInto":138,"./forEachAccumulated":146,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],52:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -19159,7 +20565,7 @@ var EventPluginRegistry = {
 
 module.exports = EventPluginRegistry;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/invariant":21}],52:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/invariant":21}],53:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -19364,7 +20770,7 @@ var EventPluginUtils = {
 
 module.exports = EventPluginUtils;
 }).call(this,require('_process'))
-},{"./EventConstants":49,"./ReactErrorUtils":91,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],53:[function(require,module,exports){
+},{"./EventConstants":50,"./ReactErrorUtils":92,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],54:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -19502,7 +20908,7 @@ var EventPropagators = {
 
 module.exports = EventPropagators;
 }).call(this,require('_process'))
-},{"./EventConstants":49,"./EventPluginHub":50,"./accumulateInto":137,"./forEachAccumulated":145,"_process":2,"fbjs/lib/warning":32}],54:[function(require,module,exports){
+},{"./EventConstants":50,"./EventPluginHub":51,"./accumulateInto":138,"./forEachAccumulated":146,"_process":2,"fbjs/lib/warning":32}],55:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -19598,7 +21004,7 @@ assign(FallbackCompositionState.prototype, {
 PooledClass.addPoolingTo(FallbackCompositionState);
 
 module.exports = FallbackCompositionState;
-},{"./Object.assign":57,"./PooledClass":58,"./getTextContentAccessor":152}],55:[function(require,module,exports){
+},{"./Object.assign":58,"./PooledClass":59,"./getTextContentAccessor":153}],56:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -19831,7 +21237,7 @@ var HTMLDOMPropertyConfig = {
 };
 
 module.exports = HTMLDOMPropertyConfig;
-},{"./DOMProperty":44,"fbjs/lib/ExecutionEnvironment":7}],56:[function(require,module,exports){
+},{"./DOMProperty":45,"fbjs/lib/ExecutionEnvironment":7}],57:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -19968,7 +21374,7 @@ var LinkedValueUtils = {
 
 module.exports = LinkedValueUtils;
 }).call(this,require('_process'))
-},{"./ReactPropTypeLocations":108,"./ReactPropTypes":109,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],57:[function(require,module,exports){
+},{"./ReactPropTypeLocations":109,"./ReactPropTypes":110,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],58:[function(require,module,exports){
 /**
  * Copyright 2014-2015, Facebook, Inc.
  * All rights reserved.
@@ -20016,7 +21422,7 @@ function assign(target, sources) {
 }
 
 module.exports = assign;
-},{}],58:[function(require,module,exports){
+},{}],59:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -20138,7 +21544,7 @@ var PooledClass = {
 
 module.exports = PooledClass;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/invariant":21}],59:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/invariant":21}],60:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -20179,7 +21585,7 @@ React.__SECRET_DOM_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = ReactDOM;
 React.__SECRET_DOM_SERVER_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = ReactDOMServer;
 
 module.exports = React;
-},{"./Object.assign":57,"./ReactDOM":70,"./ReactDOMServer":80,"./ReactIsomorphic":98,"./deprecated":141}],60:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactDOM":71,"./ReactDOMServer":81,"./ReactIsomorphic":99,"./deprecated":142}],61:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -20218,7 +21624,7 @@ var ReactBrowserComponentMixin = {
 
 module.exports = ReactBrowserComponentMixin;
 }).call(this,require('_process'))
-},{"./ReactInstanceMap":97,"./findDOMNode":143,"_process":2,"fbjs/lib/warning":32}],61:[function(require,module,exports){
+},{"./ReactInstanceMap":98,"./findDOMNode":144,"_process":2,"fbjs/lib/warning":32}],62:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -20543,7 +21949,7 @@ ReactPerf.measureMethods(ReactBrowserEventEmitter, 'ReactBrowserEventEmitter', {
 });
 
 module.exports = ReactBrowserEventEmitter;
-},{"./EventConstants":49,"./EventPluginHub":50,"./EventPluginRegistry":51,"./Object.assign":57,"./ReactEventEmitterMixin":92,"./ReactPerf":106,"./ViewportMetrics":136,"./isEventSupported":154}],62:[function(require,module,exports){
+},{"./EventConstants":50,"./EventPluginHub":51,"./EventPluginRegistry":52,"./Object.assign":58,"./ReactEventEmitterMixin":93,"./ReactPerf":107,"./ViewportMetrics":137,"./isEventSupported":155}],63:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-2015, Facebook, Inc.
@@ -20668,7 +22074,7 @@ var ReactChildReconciler = {
 
 module.exports = ReactChildReconciler;
 }).call(this,require('_process'))
-},{"./ReactReconciler":111,"./instantiateReactComponent":153,"./shouldUpdateReactComponent":161,"./traverseAllChildren":162,"_process":2,"fbjs/lib/warning":32}],63:[function(require,module,exports){
+},{"./ReactReconciler":112,"./instantiateReactComponent":154,"./shouldUpdateReactComponent":162,"./traverseAllChildren":163,"_process":2,"fbjs/lib/warning":32}],64:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -20851,7 +22257,7 @@ var ReactChildren = {
 };
 
 module.exports = ReactChildren;
-},{"./PooledClass":58,"./ReactElement":87,"./traverseAllChildren":162,"fbjs/lib/emptyFunction":13}],64:[function(require,module,exports){
+},{"./PooledClass":59,"./ReactElement":88,"./traverseAllChildren":163,"fbjs/lib/emptyFunction":13}],65:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -21625,7 +23031,7 @@ var ReactClass = {
 
 module.exports = ReactClass;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./ReactComponent":65,"./ReactElement":87,"./ReactNoopUpdateQueue":104,"./ReactPropTypeLocationNames":107,"./ReactPropTypeLocations":108,"_process":2,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21,"fbjs/lib/keyMirror":24,"fbjs/lib/keyOf":25,"fbjs/lib/warning":32}],65:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactComponent":66,"./ReactElement":88,"./ReactNoopUpdateQueue":105,"./ReactPropTypeLocationNames":108,"./ReactPropTypeLocations":109,"_process":2,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21,"fbjs/lib/keyMirror":24,"fbjs/lib/keyOf":25,"fbjs/lib/warning":32}],66:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -21750,7 +23156,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = ReactComponent;
 }).call(this,require('_process'))
-},{"./ReactNoopUpdateQueue":104,"./canDefineProperty":139,"_process":2,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],66:[function(require,module,exports){
+},{"./ReactNoopUpdateQueue":105,"./canDefineProperty":140,"_process":2,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],67:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -21792,7 +23198,7 @@ var ReactComponentBrowserEnvironment = {
 };
 
 module.exports = ReactComponentBrowserEnvironment;
-},{"./ReactDOMIDOperations":75,"./ReactMount":100}],67:[function(require,module,exports){
+},{"./ReactDOMIDOperations":76,"./ReactMount":101}],68:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-2015, Facebook, Inc.
@@ -21846,7 +23252,7 @@ var ReactComponentEnvironment = {
 
 module.exports = ReactComponentEnvironment;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/invariant":21}],68:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/invariant":21}],69:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -22543,7 +23949,7 @@ var ReactCompositeComponent = {
 
 module.exports = ReactCompositeComponent;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./ReactComponentEnvironment":67,"./ReactCurrentOwner":69,"./ReactElement":87,"./ReactInstanceMap":97,"./ReactPerf":106,"./ReactPropTypeLocationNames":107,"./ReactPropTypeLocations":108,"./ReactReconciler":111,"./ReactUpdateQueue":117,"./shouldUpdateReactComponent":161,"_process":2,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],69:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactComponentEnvironment":68,"./ReactCurrentOwner":70,"./ReactElement":88,"./ReactInstanceMap":98,"./ReactPerf":107,"./ReactPropTypeLocationNames":108,"./ReactPropTypeLocations":109,"./ReactReconciler":112,"./ReactUpdateQueue":118,"./shouldUpdateReactComponent":162,"_process":2,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],70:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -22574,7 +23980,7 @@ var ReactCurrentOwner = {
 };
 
 module.exports = ReactCurrentOwner;
-},{}],70:[function(require,module,exports){
+},{}],71:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -22669,7 +24075,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = React;
 }).call(this,require('_process'))
-},{"./ReactCurrentOwner":69,"./ReactDOMTextComponent":81,"./ReactDefaultInjection":84,"./ReactInstanceHandles":96,"./ReactMount":100,"./ReactPerf":106,"./ReactReconciler":111,"./ReactUpdates":118,"./ReactVersion":119,"./findDOMNode":143,"./renderSubtreeIntoContainer":158,"_process":2,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/warning":32}],71:[function(require,module,exports){
+},{"./ReactCurrentOwner":70,"./ReactDOMTextComponent":82,"./ReactDefaultInjection":85,"./ReactInstanceHandles":97,"./ReactMount":101,"./ReactPerf":107,"./ReactReconciler":112,"./ReactUpdates":119,"./ReactVersion":120,"./findDOMNode":144,"./renderSubtreeIntoContainer":159,"_process":2,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/warning":32}],72:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -22720,7 +24126,7 @@ var ReactDOMButton = {
 };
 
 module.exports = ReactDOMButton;
-},{}],72:[function(require,module,exports){
+},{}],73:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -23685,7 +25091,7 @@ assign(ReactDOMComponent.prototype, ReactDOMComponent.Mixin, ReactMultiChild.Mix
 
 module.exports = ReactDOMComponent;
 }).call(this,require('_process'))
-},{"./AutoFocusUtils":36,"./CSSPropertyOperations":39,"./DOMProperty":44,"./DOMPropertyOperations":45,"./EventConstants":49,"./Object.assign":57,"./ReactBrowserEventEmitter":61,"./ReactComponentBrowserEnvironment":66,"./ReactDOMButton":71,"./ReactDOMInput":76,"./ReactDOMOption":77,"./ReactDOMSelect":78,"./ReactDOMTextarea":82,"./ReactMount":100,"./ReactMultiChild":101,"./ReactPerf":106,"./ReactUpdateQueue":117,"./canDefineProperty":139,"./escapeTextContentForBrowser":142,"./isEventSupported":154,"./setInnerHTML":159,"./setTextContent":160,"./validateDOMNesting":163,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/keyOf":25,"fbjs/lib/shallowEqual":30,"fbjs/lib/warning":32}],73:[function(require,module,exports){
+},{"./AutoFocusUtils":37,"./CSSPropertyOperations":40,"./DOMProperty":45,"./DOMPropertyOperations":46,"./EventConstants":50,"./Object.assign":58,"./ReactBrowserEventEmitter":62,"./ReactComponentBrowserEnvironment":67,"./ReactDOMButton":72,"./ReactDOMInput":77,"./ReactDOMOption":78,"./ReactDOMSelect":79,"./ReactDOMTextarea":83,"./ReactMount":101,"./ReactMultiChild":102,"./ReactPerf":107,"./ReactUpdateQueue":118,"./canDefineProperty":140,"./escapeTextContentForBrowser":143,"./isEventSupported":155,"./setInnerHTML":160,"./setTextContent":161,"./validateDOMNesting":164,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/keyOf":25,"fbjs/lib/shallowEqual":30,"fbjs/lib/warning":32}],74:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -23865,7 +25271,7 @@ var ReactDOMFactories = mapObject({
 
 module.exports = ReactDOMFactories;
 }).call(this,require('_process'))
-},{"./ReactElement":87,"./ReactElementValidator":88,"_process":2,"fbjs/lib/mapObject":26}],74:[function(require,module,exports){
+},{"./ReactElement":88,"./ReactElementValidator":89,"_process":2,"fbjs/lib/mapObject":26}],75:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -23884,7 +25290,7 @@ var ReactDOMFeatureFlags = {
 };
 
 module.exports = ReactDOMFeatureFlags;
-},{}],75:[function(require,module,exports){
+},{}],76:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -23981,7 +25387,7 @@ ReactPerf.measureMethods(ReactDOMIDOperations, 'ReactDOMIDOperations', {
 
 module.exports = ReactDOMIDOperations;
 }).call(this,require('_process'))
-},{"./DOMChildrenOperations":43,"./DOMPropertyOperations":45,"./ReactMount":100,"./ReactPerf":106,"_process":2,"fbjs/lib/invariant":21}],76:[function(require,module,exports){
+},{"./DOMChildrenOperations":44,"./DOMPropertyOperations":46,"./ReactMount":101,"./ReactPerf":107,"_process":2,"fbjs/lib/invariant":21}],77:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -24137,7 +25543,7 @@ function _handleChange(event) {
 
 module.exports = ReactDOMInput;
 }).call(this,require('_process'))
-},{"./LinkedValueUtils":56,"./Object.assign":57,"./ReactDOMIDOperations":75,"./ReactMount":100,"./ReactUpdates":118,"_process":2,"fbjs/lib/invariant":21}],77:[function(require,module,exports){
+},{"./LinkedValueUtils":57,"./Object.assign":58,"./ReactDOMIDOperations":76,"./ReactMount":101,"./ReactUpdates":119,"_process":2,"fbjs/lib/invariant":21}],78:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -24226,7 +25632,7 @@ var ReactDOMOption = {
 
 module.exports = ReactDOMOption;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./ReactChildren":63,"./ReactDOMSelect":78,"_process":2,"fbjs/lib/warning":32}],78:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactChildren":64,"./ReactDOMSelect":79,"_process":2,"fbjs/lib/warning":32}],79:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -24417,7 +25823,7 @@ function _handleChange(event) {
 
 module.exports = ReactDOMSelect;
 }).call(this,require('_process'))
-},{"./LinkedValueUtils":56,"./Object.assign":57,"./ReactMount":100,"./ReactUpdates":118,"_process":2,"fbjs/lib/warning":32}],79:[function(require,module,exports){
+},{"./LinkedValueUtils":57,"./Object.assign":58,"./ReactMount":101,"./ReactUpdates":119,"_process":2,"fbjs/lib/warning":32}],80:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -24630,7 +26036,7 @@ var ReactDOMSelection = {
 };
 
 module.exports = ReactDOMSelection;
-},{"./getNodeForCharacterOffset":151,"./getTextContentAccessor":152,"fbjs/lib/ExecutionEnvironment":7}],80:[function(require,module,exports){
+},{"./getNodeForCharacterOffset":152,"./getTextContentAccessor":153,"fbjs/lib/ExecutionEnvironment":7}],81:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -24657,7 +26063,7 @@ var ReactDOMServer = {
 };
 
 module.exports = ReactDOMServer;
-},{"./ReactDefaultInjection":84,"./ReactServerRendering":115,"./ReactVersion":119}],81:[function(require,module,exports){
+},{"./ReactDefaultInjection":85,"./ReactServerRendering":116,"./ReactVersion":120}],82:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -24787,7 +26193,7 @@ assign(ReactDOMTextComponent.prototype, {
 
 module.exports = ReactDOMTextComponent;
 }).call(this,require('_process'))
-},{"./DOMChildrenOperations":43,"./DOMPropertyOperations":45,"./Object.assign":57,"./ReactComponentBrowserEnvironment":66,"./ReactMount":100,"./escapeTextContentForBrowser":142,"./setTextContent":160,"./validateDOMNesting":163,"_process":2}],82:[function(require,module,exports){
+},{"./DOMChildrenOperations":44,"./DOMPropertyOperations":46,"./Object.assign":58,"./ReactComponentBrowserEnvironment":67,"./ReactMount":101,"./escapeTextContentForBrowser":143,"./setTextContent":161,"./validateDOMNesting":164,"_process":2}],83:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -24903,7 +26309,7 @@ function _handleChange(event) {
 
 module.exports = ReactDOMTextarea;
 }).call(this,require('_process'))
-},{"./LinkedValueUtils":56,"./Object.assign":57,"./ReactDOMIDOperations":75,"./ReactUpdates":118,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],83:[function(require,module,exports){
+},{"./LinkedValueUtils":57,"./Object.assign":58,"./ReactDOMIDOperations":76,"./ReactUpdates":119,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],84:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -24971,7 +26377,7 @@ var ReactDefaultBatchingStrategy = {
 };
 
 module.exports = ReactDefaultBatchingStrategy;
-},{"./Object.assign":57,"./ReactUpdates":118,"./Transaction":135,"fbjs/lib/emptyFunction":13}],84:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactUpdates":119,"./Transaction":136,"fbjs/lib/emptyFunction":13}],85:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -25071,7 +26477,7 @@ module.exports = {
   inject: inject
 };
 }).call(this,require('_process'))
-},{"./BeforeInputEventPlugin":37,"./ChangeEventPlugin":41,"./ClientReactRootIndex":42,"./DefaultEventPluginOrder":47,"./EnterLeaveEventPlugin":48,"./HTMLDOMPropertyConfig":55,"./ReactBrowserComponentMixin":60,"./ReactComponentBrowserEnvironment":66,"./ReactDOMComponent":72,"./ReactDOMTextComponent":81,"./ReactDefaultBatchingStrategy":83,"./ReactDefaultPerf":85,"./ReactEventListener":93,"./ReactInjection":94,"./ReactInstanceHandles":96,"./ReactMount":100,"./ReactReconcileTransaction":110,"./SVGDOMPropertyConfig":120,"./SelectEventPlugin":121,"./ServerReactRootIndex":122,"./SimpleEventPlugin":123,"_process":2,"fbjs/lib/ExecutionEnvironment":7}],85:[function(require,module,exports){
+},{"./BeforeInputEventPlugin":38,"./ChangeEventPlugin":42,"./ClientReactRootIndex":43,"./DefaultEventPluginOrder":48,"./EnterLeaveEventPlugin":49,"./HTMLDOMPropertyConfig":56,"./ReactBrowserComponentMixin":61,"./ReactComponentBrowserEnvironment":67,"./ReactDOMComponent":73,"./ReactDOMTextComponent":82,"./ReactDefaultBatchingStrategy":84,"./ReactDefaultPerf":86,"./ReactEventListener":94,"./ReactInjection":95,"./ReactInstanceHandles":97,"./ReactMount":101,"./ReactReconcileTransaction":111,"./SVGDOMPropertyConfig":121,"./SelectEventPlugin":122,"./ServerReactRootIndex":123,"./SimpleEventPlugin":124,"_process":2,"fbjs/lib/ExecutionEnvironment":7}],86:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -25309,7 +26715,7 @@ var ReactDefaultPerf = {
 };
 
 module.exports = ReactDefaultPerf;
-},{"./DOMProperty":44,"./ReactDefaultPerfAnalysis":86,"./ReactMount":100,"./ReactPerf":106,"fbjs/lib/performanceNow":29}],86:[function(require,module,exports){
+},{"./DOMProperty":45,"./ReactDefaultPerfAnalysis":87,"./ReactMount":101,"./ReactPerf":107,"fbjs/lib/performanceNow":29}],87:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -25509,7 +26915,7 @@ var ReactDefaultPerfAnalysis = {
 };
 
 module.exports = ReactDefaultPerfAnalysis;
-},{"./Object.assign":57}],87:[function(require,module,exports){
+},{"./Object.assign":58}],88:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-2015, Facebook, Inc.
@@ -25759,7 +27165,7 @@ ReactElement.isValidElement = function (object) {
 
 module.exports = ReactElement;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./ReactCurrentOwner":69,"./canDefineProperty":139,"_process":2}],88:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactCurrentOwner":70,"./canDefineProperty":140,"_process":2}],89:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-2015, Facebook, Inc.
@@ -26043,7 +27449,7 @@ var ReactElementValidator = {
 
 module.exports = ReactElementValidator;
 }).call(this,require('_process'))
-},{"./ReactCurrentOwner":69,"./ReactElement":87,"./ReactPropTypeLocationNames":107,"./ReactPropTypeLocations":108,"./canDefineProperty":139,"./getIteratorFn":150,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],89:[function(require,module,exports){
+},{"./ReactCurrentOwner":70,"./ReactElement":88,"./ReactPropTypeLocationNames":108,"./ReactPropTypeLocations":109,"./canDefineProperty":140,"./getIteratorFn":151,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],90:[function(require,module,exports){
 /**
  * Copyright 2014-2015, Facebook, Inc.
  * All rights reserved.
@@ -26095,7 +27501,7 @@ assign(ReactEmptyComponent.prototype, {
 ReactEmptyComponent.injection = ReactEmptyComponentInjection;
 
 module.exports = ReactEmptyComponent;
-},{"./Object.assign":57,"./ReactElement":87,"./ReactEmptyComponentRegistry":90,"./ReactReconciler":111}],90:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactElement":88,"./ReactEmptyComponentRegistry":91,"./ReactReconciler":112}],91:[function(require,module,exports){
 /**
  * Copyright 2014-2015, Facebook, Inc.
  * All rights reserved.
@@ -26144,7 +27550,7 @@ var ReactEmptyComponentRegistry = {
 };
 
 module.exports = ReactEmptyComponentRegistry;
-},{}],91:[function(require,module,exports){
+},{}],92:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -26224,7 +27630,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = ReactErrorUtils;
 }).call(this,require('_process'))
-},{"_process":2}],92:[function(require,module,exports){
+},{"_process":2}],93:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -26263,7 +27669,7 @@ var ReactEventEmitterMixin = {
 };
 
 module.exports = ReactEventEmitterMixin;
-},{"./EventPluginHub":50}],93:[function(require,module,exports){
+},{"./EventPluginHub":51}],94:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -26475,7 +27881,7 @@ var ReactEventListener = {
 };
 
 module.exports = ReactEventListener;
-},{"./Object.assign":57,"./PooledClass":58,"./ReactInstanceHandles":96,"./ReactMount":100,"./ReactUpdates":118,"./getEventTarget":149,"fbjs/lib/EventListener":6,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/getUnboundedScrollPosition":18}],94:[function(require,module,exports){
+},{"./Object.assign":58,"./PooledClass":59,"./ReactInstanceHandles":97,"./ReactMount":101,"./ReactUpdates":119,"./getEventTarget":150,"fbjs/lib/EventListener":6,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/getUnboundedScrollPosition":18}],95:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -26514,7 +27920,7 @@ var ReactInjection = {
 };
 
 module.exports = ReactInjection;
-},{"./DOMProperty":44,"./EventPluginHub":50,"./ReactBrowserEventEmitter":61,"./ReactClass":64,"./ReactComponentEnvironment":67,"./ReactEmptyComponent":89,"./ReactNativeComponent":103,"./ReactPerf":106,"./ReactRootIndex":113,"./ReactUpdates":118}],95:[function(require,module,exports){
+},{"./DOMProperty":45,"./EventPluginHub":51,"./ReactBrowserEventEmitter":62,"./ReactClass":65,"./ReactComponentEnvironment":68,"./ReactEmptyComponent":90,"./ReactNativeComponent":104,"./ReactPerf":107,"./ReactRootIndex":114,"./ReactUpdates":119}],96:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -26639,7 +28045,7 @@ var ReactInputSelection = {
 };
 
 module.exports = ReactInputSelection;
-},{"./ReactDOMSelection":79,"fbjs/lib/containsNode":10,"fbjs/lib/focusNode":15,"fbjs/lib/getActiveElement":16}],96:[function(require,module,exports){
+},{"./ReactDOMSelection":80,"fbjs/lib/containsNode":10,"fbjs/lib/focusNode":15,"fbjs/lib/getActiveElement":16}],97:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -26944,7 +28350,7 @@ var ReactInstanceHandles = {
 
 module.exports = ReactInstanceHandles;
 }).call(this,require('_process'))
-},{"./ReactRootIndex":113,"_process":2,"fbjs/lib/invariant":21}],97:[function(require,module,exports){
+},{"./ReactRootIndex":114,"_process":2,"fbjs/lib/invariant":21}],98:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -26992,7 +28398,7 @@ var ReactInstanceMap = {
 };
 
 module.exports = ReactInstanceMap;
-},{}],98:[function(require,module,exports){
+},{}],99:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -27069,7 +28475,7 @@ var React = {
 
 module.exports = React;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./ReactChildren":63,"./ReactClass":64,"./ReactComponent":65,"./ReactDOMFactories":73,"./ReactElement":87,"./ReactElementValidator":88,"./ReactPropTypes":109,"./ReactVersion":119,"./onlyChild":156,"_process":2}],99:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactChildren":64,"./ReactClass":65,"./ReactComponent":66,"./ReactDOMFactories":74,"./ReactElement":88,"./ReactElementValidator":89,"./ReactPropTypes":110,"./ReactVersion":120,"./onlyChild":157,"_process":2}],100:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -27115,7 +28521,7 @@ var ReactMarkupChecksum = {
 };
 
 module.exports = ReactMarkupChecksum;
-},{"./adler32":138}],100:[function(require,module,exports){
+},{"./adler32":139}],101:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -27968,7 +29374,7 @@ ReactPerf.measureMethods(ReactMount, 'ReactMount', {
 
 module.exports = ReactMount;
 }).call(this,require('_process'))
-},{"./DOMProperty":44,"./Object.assign":57,"./ReactBrowserEventEmitter":61,"./ReactCurrentOwner":69,"./ReactDOMFeatureFlags":74,"./ReactElement":87,"./ReactEmptyComponentRegistry":90,"./ReactInstanceHandles":96,"./ReactInstanceMap":97,"./ReactMarkupChecksum":99,"./ReactPerf":106,"./ReactReconciler":111,"./ReactUpdateQueue":117,"./ReactUpdates":118,"./instantiateReactComponent":153,"./setInnerHTML":159,"./shouldUpdateReactComponent":161,"./validateDOMNesting":163,"_process":2,"fbjs/lib/containsNode":10,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],101:[function(require,module,exports){
+},{"./DOMProperty":45,"./Object.assign":58,"./ReactBrowserEventEmitter":62,"./ReactCurrentOwner":70,"./ReactDOMFeatureFlags":75,"./ReactElement":88,"./ReactEmptyComponentRegistry":91,"./ReactInstanceHandles":97,"./ReactInstanceMap":98,"./ReactMarkupChecksum":100,"./ReactPerf":107,"./ReactReconciler":112,"./ReactUpdateQueue":118,"./ReactUpdates":119,"./instantiateReactComponent":154,"./setInnerHTML":160,"./shouldUpdateReactComponent":162,"./validateDOMNesting":164,"_process":2,"fbjs/lib/containsNode":10,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],102:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -28467,7 +29873,7 @@ var ReactMultiChild = {
 
 module.exports = ReactMultiChild;
 }).call(this,require('_process'))
-},{"./ReactChildReconciler":62,"./ReactComponentEnvironment":67,"./ReactCurrentOwner":69,"./ReactMultiChildUpdateTypes":102,"./ReactReconciler":111,"./flattenChildren":144,"_process":2}],102:[function(require,module,exports){
+},{"./ReactChildReconciler":63,"./ReactComponentEnvironment":68,"./ReactCurrentOwner":70,"./ReactMultiChildUpdateTypes":103,"./ReactReconciler":112,"./flattenChildren":145,"_process":2}],103:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -28500,7 +29906,7 @@ var ReactMultiChildUpdateTypes = keyMirror({
 });
 
 module.exports = ReactMultiChildUpdateTypes;
-},{"fbjs/lib/keyMirror":24}],103:[function(require,module,exports){
+},{"fbjs/lib/keyMirror":24}],104:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-2015, Facebook, Inc.
@@ -28597,7 +30003,7 @@ var ReactNativeComponent = {
 
 module.exports = ReactNativeComponent;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"_process":2,"fbjs/lib/invariant":21}],104:[function(require,module,exports){
+},{"./Object.assign":58,"_process":2,"fbjs/lib/invariant":21}],105:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2015, Facebook, Inc.
@@ -28718,7 +30124,7 @@ var ReactNoopUpdateQueue = {
 
 module.exports = ReactNoopUpdateQueue;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/warning":32}],105:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/warning":32}],106:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -28812,7 +30218,7 @@ var ReactOwner = {
 
 module.exports = ReactOwner;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/invariant":21}],106:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/invariant":21}],107:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -28911,7 +30317,7 @@ function _noMeasure(objName, fnName, func) {
 
 module.exports = ReactPerf;
 }).call(this,require('_process'))
-},{"_process":2}],107:[function(require,module,exports){
+},{"_process":2}],108:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -28938,7 +30344,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = ReactPropTypeLocationNames;
 }).call(this,require('_process'))
-},{"_process":2}],108:[function(require,module,exports){
+},{"_process":2}],109:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -28961,7 +30367,7 @@ var ReactPropTypeLocations = keyMirror({
 });
 
 module.exports = ReactPropTypeLocations;
-},{"fbjs/lib/keyMirror":24}],109:[function(require,module,exports){
+},{"fbjs/lib/keyMirror":24}],110:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -29318,7 +30724,7 @@ function getClassName(propValue) {
 }
 
 module.exports = ReactPropTypes;
-},{"./ReactElement":87,"./ReactPropTypeLocationNames":107,"./getIteratorFn":150,"fbjs/lib/emptyFunction":13}],110:[function(require,module,exports){
+},{"./ReactElement":88,"./ReactPropTypeLocationNames":108,"./getIteratorFn":151,"fbjs/lib/emptyFunction":13}],111:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -29470,7 +30876,7 @@ assign(ReactReconcileTransaction.prototype, Transaction.Mixin, Mixin);
 PooledClass.addPoolingTo(ReactReconcileTransaction);
 
 module.exports = ReactReconcileTransaction;
-},{"./CallbackQueue":40,"./Object.assign":57,"./PooledClass":58,"./ReactBrowserEventEmitter":61,"./ReactDOMFeatureFlags":74,"./ReactInputSelection":95,"./Transaction":135}],111:[function(require,module,exports){
+},{"./CallbackQueue":41,"./Object.assign":58,"./PooledClass":59,"./ReactBrowserEventEmitter":62,"./ReactDOMFeatureFlags":75,"./ReactInputSelection":96,"./Transaction":136}],112:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -29578,7 +30984,7 @@ var ReactReconciler = {
 };
 
 module.exports = ReactReconciler;
-},{"./ReactRef":112}],112:[function(require,module,exports){
+},{"./ReactRef":113}],113:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -29657,7 +31063,7 @@ ReactRef.detachRefs = function (instance, element) {
 };
 
 module.exports = ReactRef;
-},{"./ReactOwner":105}],113:[function(require,module,exports){
+},{"./ReactOwner":106}],114:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -29687,7 +31093,7 @@ var ReactRootIndex = {
 };
 
 module.exports = ReactRootIndex;
-},{}],114:[function(require,module,exports){
+},{}],115:[function(require,module,exports){
 /**
  * Copyright 2014-2015, Facebook, Inc.
  * All rights reserved.
@@ -29711,7 +31117,7 @@ var ReactServerBatchingStrategy = {
 };
 
 module.exports = ReactServerBatchingStrategy;
-},{}],115:[function(require,module,exports){
+},{}],116:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -29797,7 +31203,7 @@ module.exports = {
   renderToStaticMarkup: renderToStaticMarkup
 };
 }).call(this,require('_process'))
-},{"./ReactDefaultBatchingStrategy":83,"./ReactElement":87,"./ReactInstanceHandles":96,"./ReactMarkupChecksum":99,"./ReactServerBatchingStrategy":114,"./ReactServerRenderingTransaction":116,"./ReactUpdates":118,"./instantiateReactComponent":153,"_process":2,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21}],116:[function(require,module,exports){
+},{"./ReactDefaultBatchingStrategy":84,"./ReactElement":88,"./ReactInstanceHandles":97,"./ReactMarkupChecksum":100,"./ReactServerBatchingStrategy":115,"./ReactServerRenderingTransaction":117,"./ReactUpdates":119,"./instantiateReactComponent":154,"_process":2,"fbjs/lib/emptyObject":14,"fbjs/lib/invariant":21}],117:[function(require,module,exports){
 /**
  * Copyright 2014-2015, Facebook, Inc.
  * All rights reserved.
@@ -29885,7 +31291,7 @@ assign(ReactServerRenderingTransaction.prototype, Transaction.Mixin, Mixin);
 PooledClass.addPoolingTo(ReactServerRenderingTransaction);
 
 module.exports = ReactServerRenderingTransaction;
-},{"./CallbackQueue":40,"./Object.assign":57,"./PooledClass":58,"./Transaction":135,"fbjs/lib/emptyFunction":13}],117:[function(require,module,exports){
+},{"./CallbackQueue":41,"./Object.assign":58,"./PooledClass":59,"./Transaction":136,"fbjs/lib/emptyFunction":13}],118:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2015, Facebook, Inc.
@@ -30145,7 +31551,7 @@ var ReactUpdateQueue = {
 
 module.exports = ReactUpdateQueue;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./ReactCurrentOwner":69,"./ReactElement":87,"./ReactInstanceMap":97,"./ReactUpdates":118,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],118:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactCurrentOwner":70,"./ReactElement":88,"./ReactInstanceMap":98,"./ReactUpdates":119,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],119:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -30371,7 +31777,7 @@ var ReactUpdates = {
 
 module.exports = ReactUpdates;
 }).call(this,require('_process'))
-},{"./CallbackQueue":40,"./Object.assign":57,"./PooledClass":58,"./ReactPerf":106,"./ReactReconciler":111,"./Transaction":135,"_process":2,"fbjs/lib/invariant":21}],119:[function(require,module,exports){
+},{"./CallbackQueue":41,"./Object.assign":58,"./PooledClass":59,"./ReactPerf":107,"./ReactReconciler":112,"./Transaction":136,"_process":2,"fbjs/lib/invariant":21}],120:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -30386,7 +31792,7 @@ module.exports = ReactUpdates;
 'use strict';
 
 module.exports = '0.14.3';
-},{}],120:[function(require,module,exports){
+},{}],121:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -30514,7 +31920,7 @@ var SVGDOMPropertyConfig = {
 };
 
 module.exports = SVGDOMPropertyConfig;
-},{"./DOMProperty":44}],121:[function(require,module,exports){
+},{"./DOMProperty":45}],122:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -30716,7 +32122,7 @@ var SelectEventPlugin = {
 };
 
 module.exports = SelectEventPlugin;
-},{"./EventConstants":49,"./EventPropagators":53,"./ReactInputSelection":95,"./SyntheticEvent":127,"./isTextInputElement":155,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/getActiveElement":16,"fbjs/lib/keyOf":25,"fbjs/lib/shallowEqual":30}],122:[function(require,module,exports){
+},{"./EventConstants":50,"./EventPropagators":54,"./ReactInputSelection":96,"./SyntheticEvent":128,"./isTextInputElement":156,"fbjs/lib/ExecutionEnvironment":7,"fbjs/lib/getActiveElement":16,"fbjs/lib/keyOf":25,"fbjs/lib/shallowEqual":30}],123:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -30746,7 +32152,7 @@ var ServerReactRootIndex = {
 };
 
 module.exports = ServerReactRootIndex;
-},{}],123:[function(require,module,exports){
+},{}],124:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -31336,7 +32742,7 @@ var SimpleEventPlugin = {
 
 module.exports = SimpleEventPlugin;
 }).call(this,require('_process'))
-},{"./EventConstants":49,"./EventPropagators":53,"./ReactMount":100,"./SyntheticClipboardEvent":124,"./SyntheticDragEvent":126,"./SyntheticEvent":127,"./SyntheticFocusEvent":128,"./SyntheticKeyboardEvent":130,"./SyntheticMouseEvent":131,"./SyntheticTouchEvent":132,"./SyntheticUIEvent":133,"./SyntheticWheelEvent":134,"./getEventCharCode":146,"_process":2,"fbjs/lib/EventListener":6,"fbjs/lib/emptyFunction":13,"fbjs/lib/invariant":21,"fbjs/lib/keyOf":25}],124:[function(require,module,exports){
+},{"./EventConstants":50,"./EventPropagators":54,"./ReactMount":101,"./SyntheticClipboardEvent":125,"./SyntheticDragEvent":127,"./SyntheticEvent":128,"./SyntheticFocusEvent":129,"./SyntheticKeyboardEvent":131,"./SyntheticMouseEvent":132,"./SyntheticTouchEvent":133,"./SyntheticUIEvent":134,"./SyntheticWheelEvent":135,"./getEventCharCode":147,"_process":2,"fbjs/lib/EventListener":6,"fbjs/lib/emptyFunction":13,"fbjs/lib/invariant":21,"fbjs/lib/keyOf":25}],125:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31376,7 +32782,7 @@ function SyntheticClipboardEvent(dispatchConfig, dispatchMarker, nativeEvent, na
 SyntheticEvent.augmentClass(SyntheticClipboardEvent, ClipboardEventInterface);
 
 module.exports = SyntheticClipboardEvent;
-},{"./SyntheticEvent":127}],125:[function(require,module,exports){
+},{"./SyntheticEvent":128}],126:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31414,7 +32820,7 @@ function SyntheticCompositionEvent(dispatchConfig, dispatchMarker, nativeEvent, 
 SyntheticEvent.augmentClass(SyntheticCompositionEvent, CompositionEventInterface);
 
 module.exports = SyntheticCompositionEvent;
-},{"./SyntheticEvent":127}],126:[function(require,module,exports){
+},{"./SyntheticEvent":128}],127:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31452,7 +32858,7 @@ function SyntheticDragEvent(dispatchConfig, dispatchMarker, nativeEvent, nativeE
 SyntheticMouseEvent.augmentClass(SyntheticDragEvent, DragEventInterface);
 
 module.exports = SyntheticDragEvent;
-},{"./SyntheticMouseEvent":131}],127:[function(require,module,exports){
+},{"./SyntheticMouseEvent":132}],128:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -31632,7 +33038,7 @@ PooledClass.addPoolingTo(SyntheticEvent, PooledClass.fourArgumentPooler);
 
 module.exports = SyntheticEvent;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./PooledClass":58,"_process":2,"fbjs/lib/emptyFunction":13,"fbjs/lib/warning":32}],128:[function(require,module,exports){
+},{"./Object.assign":58,"./PooledClass":59,"_process":2,"fbjs/lib/emptyFunction":13,"fbjs/lib/warning":32}],129:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31670,7 +33076,7 @@ function SyntheticFocusEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticUIEvent.augmentClass(SyntheticFocusEvent, FocusEventInterface);
 
 module.exports = SyntheticFocusEvent;
-},{"./SyntheticUIEvent":133}],129:[function(require,module,exports){
+},{"./SyntheticUIEvent":134}],130:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31709,7 +33115,7 @@ function SyntheticInputEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticEvent.augmentClass(SyntheticInputEvent, InputEventInterface);
 
 module.exports = SyntheticInputEvent;
-},{"./SyntheticEvent":127}],130:[function(require,module,exports){
+},{"./SyntheticEvent":128}],131:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31795,7 +33201,7 @@ function SyntheticKeyboardEvent(dispatchConfig, dispatchMarker, nativeEvent, nat
 SyntheticUIEvent.augmentClass(SyntheticKeyboardEvent, KeyboardEventInterface);
 
 module.exports = SyntheticKeyboardEvent;
-},{"./SyntheticUIEvent":133,"./getEventCharCode":146,"./getEventKey":147,"./getEventModifierState":148}],131:[function(require,module,exports){
+},{"./SyntheticUIEvent":134,"./getEventCharCode":147,"./getEventKey":148,"./getEventModifierState":149}],132:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31869,7 +33275,7 @@ function SyntheticMouseEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticUIEvent.augmentClass(SyntheticMouseEvent, MouseEventInterface);
 
 module.exports = SyntheticMouseEvent;
-},{"./SyntheticUIEvent":133,"./ViewportMetrics":136,"./getEventModifierState":148}],132:[function(require,module,exports){
+},{"./SyntheticUIEvent":134,"./ViewportMetrics":137,"./getEventModifierState":149}],133:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31916,7 +33322,7 @@ function SyntheticTouchEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticUIEvent.augmentClass(SyntheticTouchEvent, TouchEventInterface);
 
 module.exports = SyntheticTouchEvent;
-},{"./SyntheticUIEvent":133,"./getEventModifierState":148}],133:[function(require,module,exports){
+},{"./SyntheticUIEvent":134,"./getEventModifierState":149}],134:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -31977,7 +33383,7 @@ function SyntheticUIEvent(dispatchConfig, dispatchMarker, nativeEvent, nativeEve
 SyntheticEvent.augmentClass(SyntheticUIEvent, UIEventInterface);
 
 module.exports = SyntheticUIEvent;
-},{"./SyntheticEvent":127,"./getEventTarget":149}],134:[function(require,module,exports){
+},{"./SyntheticEvent":128,"./getEventTarget":150}],135:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32033,7 +33439,7 @@ function SyntheticWheelEvent(dispatchConfig, dispatchMarker, nativeEvent, native
 SyntheticMouseEvent.augmentClass(SyntheticWheelEvent, WheelEventInterface);
 
 module.exports = SyntheticWheelEvent;
-},{"./SyntheticMouseEvent":131}],135:[function(require,module,exports){
+},{"./SyntheticMouseEvent":132}],136:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -32267,7 +33673,7 @@ var Transaction = {
 
 module.exports = Transaction;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/invariant":21}],136:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/invariant":21}],137:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32295,7 +33701,7 @@ var ViewportMetrics = {
 };
 
 module.exports = ViewportMetrics;
-},{}],137:[function(require,module,exports){
+},{}],138:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2014-2015, Facebook, Inc.
@@ -32357,7 +33763,7 @@ function accumulateInto(current, next) {
 
 module.exports = accumulateInto;
 }).call(this,require('_process'))
-},{"_process":2,"fbjs/lib/invariant":21}],138:[function(require,module,exports){
+},{"_process":2,"fbjs/lib/invariant":21}],139:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32400,7 +33806,7 @@ function adler32(data) {
 }
 
 module.exports = adler32;
-},{}],139:[function(require,module,exports){
+},{}],140:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -32427,7 +33833,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = canDefineProperty;
 }).call(this,require('_process'))
-},{"_process":2}],140:[function(require,module,exports){
+},{"_process":2}],141:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32483,7 +33889,7 @@ function dangerousStyleValue(name, value) {
 }
 
 module.exports = dangerousStyleValue;
-},{"./CSSProperty":38}],141:[function(require,module,exports){
+},{"./CSSProperty":39}],142:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -32534,7 +33940,7 @@ function deprecated(fnName, newModule, newPackage, ctx, fn) {
 
 module.exports = deprecated;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"_process":2,"fbjs/lib/warning":32}],142:[function(require,module,exports){
+},{"./Object.assign":58,"_process":2,"fbjs/lib/warning":32}],143:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32573,7 +33979,7 @@ function escapeTextContentForBrowser(text) {
 }
 
 module.exports = escapeTextContentForBrowser;
-},{}],143:[function(require,module,exports){
+},{}],144:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -32625,7 +34031,7 @@ function findDOMNode(componentOrElement) {
 
 module.exports = findDOMNode;
 }).call(this,require('_process'))
-},{"./ReactCurrentOwner":69,"./ReactInstanceMap":97,"./ReactMount":100,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],144:[function(require,module,exports){
+},{"./ReactCurrentOwner":70,"./ReactInstanceMap":98,"./ReactMount":101,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],145:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -32676,7 +34082,7 @@ function flattenChildren(children) {
 
 module.exports = flattenChildren;
 }).call(this,require('_process'))
-},{"./traverseAllChildren":162,"_process":2,"fbjs/lib/warning":32}],145:[function(require,module,exports){
+},{"./traverseAllChildren":163,"_process":2,"fbjs/lib/warning":32}],146:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32706,7 +34112,7 @@ var forEachAccumulated = function (arr, cb, scope) {
 };
 
 module.exports = forEachAccumulated;
-},{}],146:[function(require,module,exports){
+},{}],147:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32757,7 +34163,7 @@ function getEventCharCode(nativeEvent) {
 }
 
 module.exports = getEventCharCode;
-},{}],147:[function(require,module,exports){
+},{}],148:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32861,7 +34267,7 @@ function getEventKey(nativeEvent) {
 }
 
 module.exports = getEventKey;
-},{"./getEventCharCode":146}],148:[function(require,module,exports){
+},{"./getEventCharCode":147}],149:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32906,7 +34312,7 @@ function getEventModifierState(nativeEvent) {
 }
 
 module.exports = getEventModifierState;
-},{}],149:[function(require,module,exports){
+},{}],150:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32936,7 +34342,7 @@ function getEventTarget(nativeEvent) {
 }
 
 module.exports = getEventTarget;
-},{}],150:[function(require,module,exports){
+},{}],151:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -32977,7 +34383,7 @@ function getIteratorFn(maybeIterable) {
 }
 
 module.exports = getIteratorFn;
-},{}],151:[function(require,module,exports){
+},{}],152:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33051,7 +34457,7 @@ function getNodeForCharacterOffset(root, offset) {
 }
 
 module.exports = getNodeForCharacterOffset;
-},{}],152:[function(require,module,exports){
+},{}],153:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33085,7 +34491,7 @@ function getTextContentAccessor() {
 }
 
 module.exports = getTextContentAccessor;
-},{"fbjs/lib/ExecutionEnvironment":7}],153:[function(require,module,exports){
+},{"fbjs/lib/ExecutionEnvironment":7}],154:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -33200,7 +34606,7 @@ function instantiateReactComponent(node) {
 
 module.exports = instantiateReactComponent;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"./ReactCompositeComponent":68,"./ReactEmptyComponent":89,"./ReactNativeComponent":103,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],154:[function(require,module,exports){
+},{"./Object.assign":58,"./ReactCompositeComponent":69,"./ReactEmptyComponent":90,"./ReactNativeComponent":104,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],155:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33261,7 +34667,7 @@ function isEventSupported(eventNameSuffix, capture) {
 }
 
 module.exports = isEventSupported;
-},{"fbjs/lib/ExecutionEnvironment":7}],155:[function(require,module,exports){
+},{"fbjs/lib/ExecutionEnvironment":7}],156:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33302,7 +34708,7 @@ function isTextInputElement(elem) {
 }
 
 module.exports = isTextInputElement;
-},{}],156:[function(require,module,exports){
+},{}],157:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -33338,7 +34744,7 @@ function onlyChild(children) {
 
 module.exports = onlyChild;
 }).call(this,require('_process'))
-},{"./ReactElement":87,"_process":2,"fbjs/lib/invariant":21}],157:[function(require,module,exports){
+},{"./ReactElement":88,"_process":2,"fbjs/lib/invariant":21}],158:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33365,7 +34771,7 @@ function quoteAttributeValueForBrowser(value) {
 }
 
 module.exports = quoteAttributeValueForBrowser;
-},{"./escapeTextContentForBrowser":142}],158:[function(require,module,exports){
+},{"./escapeTextContentForBrowser":143}],159:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33382,7 +34788,7 @@ module.exports = quoteAttributeValueForBrowser;
 var ReactMount = require('./ReactMount');
 
 module.exports = ReactMount.renderSubtreeIntoContainer;
-},{"./ReactMount":100}],159:[function(require,module,exports){
+},{"./ReactMount":101}],160:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33473,7 +34879,7 @@ if (ExecutionEnvironment.canUseDOM) {
 }
 
 module.exports = setInnerHTML;
-},{"fbjs/lib/ExecutionEnvironment":7}],160:[function(require,module,exports){
+},{"fbjs/lib/ExecutionEnvironment":7}],161:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33514,7 +34920,7 @@ if (ExecutionEnvironment.canUseDOM) {
 }
 
 module.exports = setTextContent;
-},{"./escapeTextContentForBrowser":142,"./setInnerHTML":159,"fbjs/lib/ExecutionEnvironment":7}],161:[function(require,module,exports){
+},{"./escapeTextContentForBrowser":143,"./setInnerHTML":160,"fbjs/lib/ExecutionEnvironment":7}],162:[function(require,module,exports){
 /**
  * Copyright 2013-2015, Facebook, Inc.
  * All rights reserved.
@@ -33558,7 +34964,7 @@ function shouldUpdateReactComponent(prevElement, nextElement) {
 }
 
 module.exports = shouldUpdateReactComponent;
-},{}],162:[function(require,module,exports){
+},{}],163:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2013-2015, Facebook, Inc.
@@ -33750,7 +35156,7 @@ function traverseAllChildren(children, callback, traverseContext) {
 
 module.exports = traverseAllChildren;
 }).call(this,require('_process'))
-},{"./ReactCurrentOwner":69,"./ReactElement":87,"./ReactInstanceHandles":96,"./getIteratorFn":150,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],163:[function(require,module,exports){
+},{"./ReactCurrentOwner":70,"./ReactElement":88,"./ReactInstanceHandles":97,"./getIteratorFn":151,"_process":2,"fbjs/lib/invariant":21,"fbjs/lib/warning":32}],164:[function(require,module,exports){
 (function (process){
 /**
  * Copyright 2015, Facebook, Inc.
@@ -34116,12 +35522,12 @@ if (process.env.NODE_ENV !== 'production') {
 
 module.exports = validateDOMNesting;
 }).call(this,require('_process'))
-},{"./Object.assign":57,"_process":2,"fbjs/lib/emptyFunction":13,"fbjs/lib/warning":32}],164:[function(require,module,exports){
+},{"./Object.assign":58,"_process":2,"fbjs/lib/emptyFunction":13,"fbjs/lib/warning":32}],165:[function(require,module,exports){
 'use strict';
 
 module.exports = require('./lib/React');
 
-},{"./lib/React":59}],165:[function(require,module,exports){
+},{"./lib/React":60}],166:[function(require,module,exports){
 //     Underscore.js 1.8.3
 //     http://underscorejs.org
 //     (c) 2009-2015 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
