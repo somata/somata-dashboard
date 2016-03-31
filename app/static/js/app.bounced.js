@@ -69,7 +69,7 @@ ServiceGraph = React.createClass({
   render: function() {
     var all_statuses, format, formats, getKey, line, x, y;
     x = d3.time.scale().range([0, 90]);
-    y = d3.scale.linear().range([100, 5]);
+    y = d3.scale.linear().range([90, 0]);
     x.domain(status_extents);
     getKey = get_keys[this.state.key];
     all_statuses = _.flatten(this.props.instance_statuses.map(function(_arg) {
@@ -94,11 +94,11 @@ ServiceGraph = React.createClass({
     }, React.createElement("svg", {
       "className": 'axes'
     }, React.createElement("g", {
-      "className": 'x axis',
-      "transform": 'translate(0, 100%)'
+      "className": 'x axis'
     }, x.ticks(10).map(function(tick) {
       return React.createElement("text", {
         "dx": x(tick) + '%',
+        "dy": '100%',
         "key": tick
       }, moment(tick).format('HH:mm'));
     })), React.createElement("g", {
@@ -169,7 +169,8 @@ AllServiceStatuses = React.createClass({
     };
   },
   componentDidMount: function() {
-    return this.findServices();
+    this.findServices();
+    return Dispatcher.refresh$.onValue(this.findServices);
   },
   findServices: function() {
     return somata.remote('registry', 'findServices').onValue(this.foundServices).onValue(this.findAllStatuses);
