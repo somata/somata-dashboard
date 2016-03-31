@@ -67,9 +67,9 @@ ServiceGraph = React.createClass({
     });
   },
   render: function() {
-    var all_statuses, getKey, line, x, y;
-    x = d3.time.scale().range([0, 100]);
-    y = d3.scale.linear().range([100, 0]);
+    var all_statuses, format, formats, getKey, line, x, y;
+    x = d3.time.scale().range([0, 90]);
+    y = d3.scale.linear().range([100, 5]);
     x.domain(status_extents);
     getKey = get_keys[this.state.key];
     all_statuses = _.flatten(this.props.instance_statuses.map(function(_arg) {
@@ -83,10 +83,33 @@ ServiceGraph = React.createClass({
     }).y(function(d) {
       return y(getKey(d));
     });
+    formats = {
+      memory: d3.format('s'),
+      cpu: d3.format('f')
+    };
+    format = formats[this.state.key];
     return React.createElement("div", {
       "ref": 'graph',
       "className": 'graph'
     }, React.createElement("svg", {
+      "className": 'axes'
+    }, React.createElement("g", {
+      "className": 'x axis',
+      "transform": 'translate(0, 100%)'
+    }, x.ticks(10).map(function(tick) {
+      return React.createElement("text", {
+        "dx": x(tick) + '%',
+        "key": tick
+      }, moment(tick).format('HH:mm'));
+    })), React.createElement("g", {
+      "className": 'y axis'
+    }, y.ticks(10).map(function(tick) {
+      return React.createElement("text", {
+        "dy": y(tick) + '%',
+        "dx": '95%',
+        "key": tick
+      }, format(tick));
+    }))), React.createElement("svg", {
       "viewBox": "0 0 100 100",
       "preserveAspectRatio": "none"
     }, this.props.instance_statuses.map((function(_this) {
