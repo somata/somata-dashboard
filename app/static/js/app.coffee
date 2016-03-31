@@ -49,9 +49,9 @@ ServiceGraph = React.createClass
 
     render: ->
         x = d3.time.scale()
-            .range([0, 100])
+            .range([0, 90])
         y = d3.scale.linear()
-            .range([100, 0])
+            .range([100, 5])
 
         x.domain(status_extents)
 
@@ -64,7 +64,24 @@ ServiceGraph = React.createClass
             .x (d) -> x d.time
             .y (d) -> y getKey(d)
 
+        formats =
+            memory: d3.format('s')
+            cpu: d3.format('f')
+        format = formats[@state.key]
+
         <div ref='graph' className='graph'>
+            <svg className='axes'>
+                <g className='x axis' transform='translate(0, 100%)'>
+                    {x.ticks(10).map (tick) ->
+                        <text dx=x(tick)+'%' key=tick>{moment(tick).format('HH:mm')}</text>
+                    }
+                </g>
+                <g className='y axis'>
+                    {y.ticks(10).map (tick) ->
+                        <text dy=y(tick)+'%' dx='95%' key=tick>{format(tick)}</text>
+                    }
+                </g>
+            </svg>
             <svg viewBox="0 0 100 100" preserveAspectRatio="none">
                 {@props.instance_statuses.map ({instance_id, statuses}) =>
                     line_class = 'line'

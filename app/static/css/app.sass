@@ -89,12 +89,20 @@ a
     color: $colors.light_gray
 
 .graph
+    position: relative
     margin-top: $padding_small
 
     svg
         overflow: visible
         width: 100%
         height: 150px
+
+    .axes
+        position: absolute
+        top: 0
+        left: 0
+        right: 0
+        bottom: 0
 
     .axis
         path
