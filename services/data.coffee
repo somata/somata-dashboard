@@ -12,11 +12,13 @@ getAllStatusKeys = (cb) ->
 getStatuses = (instance_id, cb) ->
     t0 = moment().subtract(1, 'day').toDate().getTime()
     redis.zrangebyscore idToKey(instance_id), t0, '+inf', (err, status_jsons) ->
-        cb err, status_jsons?.map (s) -> JSON.parse(s)
+        statuses = status_jsons?.map (s) -> JSON.parse(s)
+        cb err, {instance_id, statuses}
 
 getAllStatuses = (cb) ->
     getAllStatusKeys (err, status_keys) ->
-        async.map status_keys.map(keyToId), getStatuses, cb
+        async.map status_keys.map(keyToId), getStatuses, (err, all_statuses) ->
+            cb err, all_statuses.filter ({statuses}) -> statuses.length
 
 new somata.Service 'somata:dashboard:data', {
     getStatuses
