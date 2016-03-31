@@ -51,7 +51,7 @@ ServiceGraph = React.createClass
         x = d3.time.scale()
             .range([0, 90])
         y = d3.scale.linear()
-            .range([100, 5])
+            .range([90, 0])
 
         x.domain(status_extents)
 
@@ -71,9 +71,9 @@ ServiceGraph = React.createClass
 
         <div ref='graph' className='graph'>
             <svg className='axes'>
-                <g className='x axis' transform='translate(0, 100%)'>
+                <g className='x axis'>
                     {x.ticks(10).map (tick) ->
-                        <text dx=x(tick)+'%' key=tick>{moment(tick).format('HH:mm')}</text>
+                        <text dx=x(tick)+'%' dy='100%' key=tick>{moment(tick).format('HH:mm')}</text>
                     }
                 </g>
                 <g className='y axis'>
@@ -82,6 +82,7 @@ ServiceGraph = React.createClass
                     }
                 </g>
             </svg>
+
             <svg viewBox="0 0 100 100" preserveAspectRatio="none">
                 {@props.instance_statuses.map ({instance_id, statuses}) =>
                     line_class = 'line'
@@ -113,6 +114,7 @@ AllServiceStatuses = React.createClass
 
     componentDidMount: ->
         @findServices()
+        Dispatcher.refresh$.onValue @findServices
 
     findServices: ->
         somata.remote('registry', 'findServices')
