@@ -24,7 +24,6 @@ saveInstanceStatus = (instance_status, cb) ->
         cpu: instance_status.status.cpu
 
     status_key = "status:#{instance_status.instance.id}"
-    console.log status_key
     redis.zadd status_key, time, JSON.stringify(status), (err, ok) ->
         cb null, status
 
@@ -42,15 +41,14 @@ fetchAllServicesStatuses = ->
                     instance
         )
 
-        console.log 'fetched', all_instances.length
-        for instance in all_instances
-            console.log '* ' + instance.id
+        # all_instances.map (instance) ->
+        #     console.log '* ' + instance.id
 
         async.map all_instances, fetchAndSaveInstanceStatus, (err, statuses) ->
             console.log err if err
             now = new Date
-            statuses.map (status) ->
-                console.log status.time, status.id, status.uptime, status.memory, status.cpu
+            # statuses.map (status) ->
+            #     console.log status.time, status.id, status.uptime, status.memory, status.cpu
 
 fetchAllServicesStatuses()
 setInterval fetchAllServicesStatuses, POLL_TIME
